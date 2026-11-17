@@ -1,0 +1,15 @@
+<resources>
+    <style name="Theme.Kororythm" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/grid_black</item>
+        <item name="android:statusBarColor">@color/grid_black</item>
+        <item name="android:navigationBarColor">@color/grid_black</item>
+    </style>
+
+    <!-- Splash: the parrot flaps its wings once (animated on Android 12+) -->
+    <style name="Theme.Kororythm.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/grid_black</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/avd_parrot_flap</item>
+        <item name="windowSplashScreenAnimationDuration">900</item>
+        <item name="postSplashScreenTheme">@style/Theme.Kororythm</item>
+    </style>
+</resources>

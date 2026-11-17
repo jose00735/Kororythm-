@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark sky + perspective neon grid floor -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:pathData="M0,0 H108 V108 H0 Z" android:fillColor="#FF04060B"/>
+    <path android:pathData="M0,66 H108 V108 H0 Z" android:fillColor="#FF061426"/>
+    <path android:pathData="M0,66 H108" android:strokeColor="#FF00E5FF" android:strokeWidth="0.8"/>
+    <path android:pathData="M0,71 H108 M0,78 H108 M0,88 H108 M0,102 H108"
+        android:strokeColor="#5500E5FF" android:strokeWidth="0.6"/>
+    <path android:pathData="M54,66 L54,108 M54,66 L36,108 M54,66 L18,108 M54,66 L0,108 M54,66 L72,108 M54,66 L90,108 M54,66 L108,108 M54,66 L-18,108 M54,66 L126,108"
+        android:strokeColor="#5500E5FF" android:strokeWidth="0.6"/>
+</vector>
