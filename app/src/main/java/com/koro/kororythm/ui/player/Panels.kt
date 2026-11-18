@@ -21,6 +21,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import com.koro.kororythm.AudioBus
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,6 +50,7 @@ import com.koro.kororythm.ui.skin.Neon
 import com.koro.kororythm.ui.skin.NeonButton
 import com.koro.kororythm.ui.skin.NeonPanel
 import com.koro.kororythm.ui.skin.NeonText
+import com.koro.kororythm.ui.skin.SkinState
 import com.koro.kororythm.ui.skin.drawParrot
 import com.koro.kororythm.ui.skin.neonBorder
 import com.koro.kororythm.ui.viz.VisualizerView
@@ -101,6 +104,8 @@ fun MainPanel(
     shaded: Boolean,
     onToggleShade: () -> Unit,
     modifier: Modifier = Modifier,
+    onEditTags: (String) -> Unit = {},
+    onOpenDj: () -> Unit = {},
 ) {
     var vizMode by rememberSaveable { mutableStateOf(VizMode.BARS) }
     var remaining by rememberSaveable { mutableStateOf(false) }
@@ -125,12 +130,20 @@ fun MainPanel(
         },
     ) {
         Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.clickable { remaining = !remaining }) {
+            val hifi = Neon.isHiFi
+            val lcd = if (hifi) Modifier.background(Neon.Lcd, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 2.dp) else Modifier
+            Column(lcd.clickable { remaining = !remaining }) {
                 NeonText(
                     if (st.isPlaying) "▶ PLAY" else if (st.positionMs > 0) "❚❚ PAUSE" else "■ STOP",
-                    size = 9.sp, color = if (st.isPlaying) Neon.Orange else Neon.Dim, glow = null, spacing = 2.sp,
+                    size = 9.sp,
+                    color = when {
+                        hifi -> Neon.LcdText.copy(alpha = if (st.isPlaying) 1f else 0.5f)
+                        st.isPlaying -> Neon.Orange
+                        else -> Neon.Dim
+                    },
+                    glow = null, spacing = 2.sp,
                 )
-                NeonText(time, size = 34.sp, weight = FontWeight.Bold, spacing = 2.sp)
+                NeonText(time, size = 34.sp, weight = FontWeight.Bold, spacing = 2.sp, color = if (hifi) Neon.LcdText else Neon.Ink, glow = if (hifi) Neon.LcdText else Neon.Cyan)
             }
             Spacer(Modifier.width(12.dp))
             VisualizerView(
@@ -138,17 +151,17 @@ fun MainPanel(
                 Modifier
                     .weight(1f)
                     .height(56.dp)
-                    .background(Color(0x66000000), RoundedCornerShape(4.dp))
+                    .background(Neon.Lcd, RoundedCornerShape(4.dp))
                     .clickable { vizMode = if (vizMode == VizMode.BARS) VizMode.SCOPE else VizMode.BARS }
                     .padding(4.dp),
             )
         }
         Box(
             Modifier.fillMaxWidth().padding(top = 6.dp)
-                .background(Color(0x66000000), RoundedCornerShape(4.dp))
+                .background(Neon.Lcd, RoundedCornerShape(4.dp))
                 .padding(horizontal = 6.dp, vertical = 4.dp),
         ) {
-            NeonText(marquee, Modifier.basicMarquee(), size = 13.sp, color = Neon.Cyan)
+            NeonText(marquee, Modifier.basicMarquee(), size = 13.sp, color = Neon.LcdText, glow = Neon.LcdText)
         }
         Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             NeonText(streamLine(cur), Modifier.weight(1f), size = 10.sp, color = Neon.Dim, glow = null)
@@ -180,6 +193,9 @@ fun MainPanel(
                 vm::cycleRepeat,
                 active = st.repeatMode != Player.REPEAT_MODE_OFF,
             )
+            Spacer(Modifier.weight(1f))
+            cur?.let { c -> NeonButton("✎ TAGS", { onEditTags(c.uri) }) }
+            NeonButton("DJ", onOpenDj, accent = Neon.Orange)
         }
     }
 }
@@ -325,17 +341,22 @@ fun PlaylistPanel(
 /** Small header: parrot mark + name. */
 @Composable
 fun Header(output: OutputDevice, modifier: Modifier = Modifier, onOpenLibrary: () -> Unit = {}) {
+    // Tapping the skin button switches Neon Grid <-> Hi-Fi; the choice is remembered.
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Canvas(Modifier.size(34.dp)) { drawParrot(Offset.Zero, size.minDimension) }
         Spacer(Modifier.width(8.dp))
-        NeonText("KORORYTHM", size = 16.sp, weight = FontWeight.Bold, spacing = 5.sp)
-        Spacer(Modifier.weight(1f))
-        if (output.bitPerfectCapable) {
-            Box(Modifier.neonBorder(Neon.Orange, 4.dp, 0.6f).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                NeonText("BIT-PERFECT READY", size = 8.sp, color = Neon.Orange, glow = Neon.Orange, weight = FontWeight.Bold)
+        NeonText("KORORYTHM", Modifier.weight(1f), size = 16.sp, weight = FontWeight.Bold, spacing = 5.sp)
+        // Lit when the DAC is really getting untouched audio; dim when it could (switch it on in DJ ▸ Sound).
+        val bpActive by AudioBus.bitPerfectActive.collectAsState()
+        if (output.bitPerfectCapable || bpActive) {
+            val c = if (bpActive) Neon.Orange else Neon.Dim
+            Box(Modifier.neonBorder(c, 4.dp, if (bpActive) 1f else 0.4f).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                NeonText(if (bpActive) "BIT-PERFECT" else "BP READY", size = 8.sp, color = c, glow = if (bpActive) c else null, weight = FontWeight.Bold)
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(6.dp))
         }
+        NeonButton("SKIN", { SkinState.next() })
+        Spacer(Modifier.width(6.dp))
         NeonButton("LIBRARY", onOpenLibrary, accent = Neon.Orange)
     }
 }

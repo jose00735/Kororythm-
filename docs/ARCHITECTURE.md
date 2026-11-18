@@ -226,3 +226,21 @@ Today's build target is phase 1: an APK that opens a FLAC file, plays it in the 
 - **Background limits:** Android can kill apps in the background. The `MediaSessionService` runs as a foreground service with the media notification, which Android allows for playback.
 - **Time-stretch and scratch** need native code (Oboe + SoundTouch through JNI), which is why the full DJ deck waits for phase 3. SoundTouch is LGPL, so it ships as a separate shared library.
 - **Storage access:** writing tags needs folder permission through the system picker; the album wizard asks once per folder.
+
+## v1.0 implementation notes
+
+What was built, and where it differs from the plan above.
+
+| Area | As built |
+| --- | --- |
+| Modules | One `app` module with packages per area (`playback`, `dsp`, `dj`, `library`, `tags`, `devices`, `widget`, `ui/*`) instead of separate Gradle modules |
+| FLAC decoding | Platform MediaCodec decoder through Media3 (the Media3 FLAC extension isn't published to Maven) |
+| DJ engine | Kotlin instead of native Oboe: a second "ghost" ExoPlayer plays the outgoing song through `OutroFxProcessor` while the main player moves on; the incoming song fades in inside `KoroDspProcessor`. Tempo/key lock uses Media3's built-in Sonic time-stretch |
+| DJ decks | No two-deck crossfader screen; the DJ panel drives transitions, tempo, FX pads and hot cues on the main deck |
+| Tag writing | Own FLAC (Vorbis comment + PICTURE) and ID3v2.4 writers (`tags/TagIo.kt`) instead of JAudioTagger, which needs desktop Java APIs; verified with mutagen and ffmpeg |
+| Tag search | MusicBrainz + Cover Art Archive, plus Apple's iTunes Search API |
+| Analysis | `AnalysisWorker` decodes each track once: EBU R128 loudness (levelling gain toward −18 LUFS) and tempo by onset autocorrelation |
+| Bit-perfect | `BitPerfectController` sets `AudioMixerAttributes` BIT_PERFECT per song; `SwitchingAudioSink` swaps to a float, no-processing AudioSink for 24-bit files. EQ, FX, transitions and levelling pause while it's active |
+| Skins | `SkinState` + palette roles; every drawing primitive asks the current skin, so switching repaints the whole app |
+| Widget | Jetpack Glance mini player |
+| Database | Room v2 adds `bpm`, `gainDb`, `analyzed` and `hot_cues` (migration keeps existing libraries) |

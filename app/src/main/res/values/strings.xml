@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Kororythm</string>
+    <string name="widget_name">Kororythm mini player</string>
+    <string name="widget_description">Now playing, with play/pause, previous and next</string>
 </resources>

@@ -13,6 +13,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
@@ -100,12 +101,20 @@ fun VisualizerView(state: VizState, mode: VizMode, modifier: Modifier = Modifier
                     val x = b * (bw + gap)
                     for (s in 0 until lit) {
                         val y = size.height - (s + 1) * (seg + segGap)
-                        val c = lerp(Neon.Cyan, Neon.Orange, s.toFloat() / segments)
+                        val f = s.toFloat() / segments
+                        val c = if (Neon.isHiFi) {
+                            // classic LED meter: green, then amber, then red
+                            when {
+                                f < 0.6f -> Color(0xFF39E07A)
+                                f < 0.82f -> Color(0xFFFFC23D)
+                                else -> Color(0xFFFF4A3D)
+                            }
+                        } else lerp(Neon.Cyan, Neon.Orange, f)
                         drawRect(c, Offset(x, y), Size(bw, seg))
                     }
                     if (pk > 0.02f) {
                         val py = size.height - pk * segments * (seg + segGap) - seg
-                        drawRect(Neon.Ink, Offset(x, py), Size(bw, 1.5.dp.toPx()))
+                        drawRect(if (Neon.isHiFi) Neon.LcdText else Neon.Ink, Offset(x, py), Size(bw, 1.5.dp.toPx()))
                     }
                 }
             }
@@ -118,9 +127,10 @@ fun VisualizerView(state: VizState, mode: VizMode, modifier: Modifier = Modifier
                     val y = mid - s[i].coerceIn(-1f, 1f) * mid * 0.95f
                     if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
                 }
-                drawLine(Neon.Cyan.copy(alpha = 0.15f), Offset(0f, mid), Offset(size.width, mid), 1f)
-                drawPath(path, Neon.Cyan.copy(alpha = 0.3f), style = Stroke(5.dp.toPx()))
-                drawPath(path, Neon.Cyan, style = Stroke(1.5.dp.toPx()))
+                val c = Neon.LcdText
+                drawLine(c.copy(alpha = 0.15f), Offset(0f, mid), Offset(size.width, mid), 1f)
+                drawPath(path, c.copy(alpha = 0.3f), style = Stroke(5.dp.toPx()))
+                drawPath(path, c, style = Stroke(1.5.dp.toPx()))
             }
         }
     }

@@ -193,7 +193,7 @@ fun WingsUpFrame(device: OutputDevice, reverse: Boolean, v: Float) {
                     bt -> "BLUETOOTH ON"
                     else -> "HEADPHONES ON"
                 }
-                NeonText(title, size = 18.sp, weight = FontWeight.Bold, spacing = 4.sp, glow = body)
+                NeonText(title, size = 18.sp, weight = FontWeight.Bold, spacing = 4.sp, color = Neon.OverlayInk, glow = body)
                 Spacer(Modifier.height(4.dp))
                 NeonText(if (reverse) "PLAYBACK PAUSED" else device.name.uppercase(), size = 11.sp, color = body, glow = null, spacing = 2.sp)
             }

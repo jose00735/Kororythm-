@@ -63,6 +63,7 @@ open class LibraryCallbacks {
     open fun deleteUserAlbum(id: Long) {}
     open fun import() {}
     open fun newAlbum() {}
+    open fun editTags(t: TrackEntity) {}
 }
 
 @Composable
@@ -73,6 +74,7 @@ fun LibraryScreen(
     onBack: () -> Unit,
     onImport: () -> Unit,
     onNewAlbum: () -> Unit,
+    onEditTags: (String) -> Unit = {},
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     BackHandler { if (ui.detail != null) vm.closeDetail() else onBack() }
@@ -92,6 +94,7 @@ fun LibraryScreen(
         override fun deleteUserAlbum(id: Long) { vm.deleteUserAlbum(id) }
         override fun import() = onImport()
         override fun newAlbum() = onNewAlbum()
+        override fun editTags(t: TrackEntity) = onEditTags(t.uri)
     }
     LibraryContent(ui, cb, nowPlayingUri)
 }
@@ -161,13 +164,13 @@ private fun Hint(text: String) {
 private fun TrackList(tracks: List<TrackEntity>, cb: LibraryCallbacks, nowPlayingUri: String?) {
     if (tracks.isEmpty()) { Hint("No tracks match your search."); return }
     LazyColumn(Modifier.fillMaxSize()) {
-        itemsIndexed(tracks, key = { _, t -> t.id }) { i, t -> TrackRow(t, t.uri == nowPlayingUri, { cb.play(tracks, i) }, { cb.enqueue(listOf(t)) }) }
+        itemsIndexed(tracks, key = { _, t -> t.id }) { i, t -> TrackRow(t, t.uri == nowPlayingUri, { cb.play(tracks, i) }, { cb.enqueue(listOf(t)) }, onEdit = { cb.editTags(t) }) }
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TrackRow(t: TrackEntity, playing: Boolean, onTap: () -> Unit, onLong: () -> Unit, number: Int? = null) {
+private fun TrackRow(t: TrackEntity, playing: Boolean, onTap: () -> Unit, onLong: () -> Unit, number: Int? = null, onEdit: (() -> Unit)? = null) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -189,6 +192,9 @@ private fun TrackRow(t: TrackEntity, playing: Boolean, onTap: () -> Unit, onLong
         if (t.tagsMissing) NeonText("●", Modifier.padding(horizontal = 4.dp), size = 9.sp, color = Neon.Orange, glow = null)
         NeonText(listOfNotNull(t.codec, t.bits?.let { "$it" }).joinToString(" "), Modifier.padding(horizontal = 6.dp), size = 9.sp, color = Neon.Dim, glow = null)
         NeonText(formatTime(t.durationMs), size = 11.sp, color = if (playing) Neon.Orange else Neon.Ink, glow = null)
+        if (onEdit != null) {
+            NeonText("✎", Modifier.clickable(onClick = onEdit).padding(start = 10.dp, end = 2.dp), size = 15.sp, color = Neon.Cyan, glow = null)
+        }
     }
 }
 
@@ -256,7 +262,7 @@ private fun DetailView(d: LibDetail, cb: LibraryCallbacks, nowPlayingUri: String
     Box(Modifier.fillMaxSize().background(Neon.Panel, RoundedCornerShape(10.dp)).neonBorder(Neon.Cyan, 10.dp, 0.7f).padding(6.dp)) {
         LazyColumn(Modifier.fillMaxSize()) {
             itemsIndexed(d.tracks, key = { i, t -> "$i:${t.id}" }) { i, t ->
-                TrackRow(t, t.uri == nowPlayingUri, { cb.play(d.tracks, i) }, { cb.enqueue(listOf(t)) }, number = i + 1)
+                TrackRow(t, t.uri == nowPlayingUri, { cb.play(d.tracks, i) }, { cb.enqueue(listOf(t)) }, number = i + 1, onEdit = { cb.editTags(t) })
             }
         }
     }

@@ -10,6 +10,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -130,15 +132,48 @@ abstract class LibraryDao {
 
     @Query("DELETE FROM user_albums WHERE id = :id")
     abstract suspend fun deleteUserAlbum(id: Long)
+
+    // ---- analysis (BPM + loudness) ----
+    @Query("SELECT * FROM tracks WHERE analyzed = 0 ORDER BY dateAdded DESC LIMIT :limit")
+    abstract suspend fun unanalyzed(limit: Int): List<TrackEntity>
+
+    @Query("UPDATE tracks SET bpm = :bpm, gainDb = :gainDb, analyzed = 1 WHERE id = :id")
+    abstract suspend fun setAnalysis(id: Long, bpm: Float?, gainDb: Float?)
+
+    @Query("SELECT COUNT(*) FROM tracks WHERE analyzed = 1")
+    abstract fun analyzedCount(): Flow<Int>
+
+    // ---- hot cues ----
+    @Query("SELECT * FROM hot_cues WHERE trackId = :trackId ORDER BY slot")
+    abstract fun cues(trackId: Long): Flow<List<HotCue>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun setCue(c: HotCue)
+
+    @Query("DELETE FROM hot_cues WHERE trackId = :trackId AND slot = :slot")
+    abstract suspend fun clearCue(trackId: Long, slot: Int)
 }
 
 @Database(
-    entities = [TrackEntity::class, TrackFts::class, UserAlbumEntity::class, UserAlbumTrack::class, SourceEntity::class],
-    version = 1,
+    entities = [TrackEntity::class, TrackFts::class, UserAlbumEntity::class, UserAlbumTrack::class, SourceEntity::class, HotCue::class],
+    version = 2,
     exportSchema = true,
 )
 abstract class LibraryDb : RoomDatabase() {
     abstract fun dao(): LibraryDao
+}
+
+/** v2 (phase 3): BPM + loudness per track, and DJ hot cues. Keeps the existing library. */
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tracks ADD COLUMN bpm REAL")
+        db.execSQL("ALTER TABLE tracks ADD COLUMN gainDb REAL")
+        db.execSQL("ALTER TABLE tracks ADD COLUMN analyzed INTEGER NOT NULL DEFAULT 0")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS hot_cues (trackId INTEGER NOT NULL, slot INTEGER NOT NULL, positionMs INTEGER NOT NULL, " +
+                "PRIMARY KEY(trackId, slot), FOREIGN KEY(trackId) REFERENCES tracks(id) ON UPDATE NO ACTION ON DELETE CASCADE)",
+        )
+    }
 }
 
 /** App-wide access to the library database. */
@@ -147,7 +182,9 @@ object Library {
 
     fun init(context: Context) {
         if (db == null) {
-            db = Room.databaseBuilder(context.applicationContext, LibraryDb::class.java, "library.db").build()
+            db = Room.databaseBuilder(context.applicationContext, LibraryDb::class.java, "library.db")
+                .addMigrations(MIGRATION_1_2)
+                .build()
         }
     }
 

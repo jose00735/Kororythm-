@@ -46,7 +46,7 @@ import com.koro.kororythm.ui.viz.rememberVizState
  * landscape / on tablets. The grid draws itself on launch, then the panels fade in.
  */
 @Composable
-fun PlayerScreen(vm: PlayerViewModel, onAddFiles: () -> Unit, onOpenLibrary: () -> Unit = {}) {
+fun PlayerScreen(vm: PlayerViewModel, onAddFiles: () -> Unit, onOpenLibrary: () -> Unit = {}, onEditTags: (String) -> Unit = {}, onOpenDj: () -> Unit = {}) {
     val st by vm.state.collectAsStateWithLifecycle()
     val eq by AudioBus.eq.collectAsStateWithLifecycle()
     val output by AudioBus.output.collectAsStateWithLifecycle()
@@ -67,7 +67,7 @@ fun PlayerScreen(vm: PlayerViewModel, onAddFiles: () -> Unit, onOpenLibrary: () 
     }
 
     Box(Modifier.fillMaxSize()) {
-        PlayerLayout(st, eq, output, viz, vm, onAddFiles, boot.value, onOpenLibrary)
+        PlayerLayout(st, eq, output, viz, vm, onAddFiles, boot.value, onOpenLibrary, onEditTags, onOpenDj)
         overlay?.let { e ->
             key(e) { DeviceOverlay(e) { if (overlay === e) overlay = null } }
         }
@@ -85,6 +85,8 @@ fun PlayerLayout(
     onAddFiles: () -> Unit,
     boot: Float = 1f,
     onOpenLibrary: () -> Unit = {},
+    onEditTags: (String) -> Unit = {},
+    onOpenDj: () -> Unit = {},
 ) {
     var mainShade by rememberSaveable { mutableStateOf(false) }
     var eqShade by rememberSaveable { mutableStateOf(false) }
@@ -101,7 +103,7 @@ fun PlayerLayout(
         ) {
             val wide = maxWidth > 640.dp
             val main: @Composable (Modifier) -> Unit = { m ->
-                MainPanel(st, viz, output, actions, onAddFiles, mainShade, { mainShade = !mainShade }, m)
+                MainPanel(st, viz, output, actions, onAddFiles, mainShade, { mainShade = !mainShade }, m, onEditTags, onOpenDj)
             }
             val eqPanel: @Composable (Modifier) -> Unit = { m ->
                 EqPanel(eq, actions, eqShade, { eqShade = !eqShade }, m)

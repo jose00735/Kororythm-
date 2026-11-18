@@ -27,6 +27,8 @@ class ImportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         val result = Scanner(applicationContext, dao).scan(sources) { p ->
             setProgress(workDataOf(K_FOUND to p.found, K_PROCESSED to p.processed, K_CURRENT to p.current))
         }
+        // New tracks get their BPM and loudness measured in the background.
+        if (result.added + result.updated > 0) com.koro.kororythm.dj.AnalysisWorker.runNow(applicationContext)
         return Result.success(toData(result))
     }
 

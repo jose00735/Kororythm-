@@ -95,16 +95,17 @@ fun NeonTextField(
             Modifier
                 .fillMaxWidth()
                 .padding(top = 3.dp)
-                .background(Color(0x99000000), RoundedCornerShape(6.dp))
+                .background(if (Neon.isHiFi) Neon.Lcd else Color(0x99000000), RoundedCornerShape(6.dp))
                 .neonBorder(Neon.Cyan, 6.dp, 0.6f)
                 .padding(horizontal = 10.dp, vertical = 9.dp),
         ) {
-            if (value.isEmpty()) NeonText(placeholder, size = 13.sp, color = Neon.Dim, glow = null)
+            val textColor = if (Neon.isHiFi) Neon.LcdText else Neon.Ink
+            if (value.isEmpty()) NeonText(placeholder, size = 13.sp, color = if (Neon.isHiFi) Neon.LcdText.copy(alpha = 0.45f) else Neon.Dim, glow = null)
             BasicTextField(
                 value = value,
                 onValueChange = onChange,
                 singleLine = true,
-                textStyle = Neon.style(13.sp, Neon.Ink, glow = null),
+                textStyle = Neon.style(13.sp, textColor, glow = null),
                 cursorBrush = SolidColor(Neon.Orange),
                 keyboardOptions = if (numeric) KeyboardOptions(keyboardType = KeyboardType.Number) else KeyboardOptions.Default,
                 modifier = Modifier.fillMaxWidth(),
@@ -136,8 +137,15 @@ private val artCache = object : LruCache<String, Bitmap>(48 * 1024 * 1024) {
  * Falls back to a small neon parrot when there is none.
  */
 @Composable
-fun ArtThumb(path: String?, modifier: Modifier = Modifier, size: Dp = 44.dp, contentUri: String? = null) {
-    val key = contentUri ?: path
+fun ArtThumb(
+    path: String?,
+    modifier: Modifier = Modifier,
+    size: Dp = 44.dp,
+    contentUri: String? = null,
+    url: String? = null,
+    bytes: ByteArray? = null,
+) {
+    val key = bytes?.let { "bytes:${it.size}:${it.contentHashCode()}" } ?: url ?: contentUri ?: path
     val context = LocalContext.current
     val inPreview = LocalInspectionMode.current
     val image by produceState<ImageBitmap?>(null, key) {
@@ -145,7 +153,17 @@ fun ArtThumb(path: String?, modifier: Modifier = Modifier, size: Dp = 44.dp, con
         artCache.get(key)?.let { value = it.asImageBitmap(); return@produceState }
         val bmp = withContext(Dispatchers.IO) {
             runCatching {
-                if (contentUri != null) {
+                if (bytes != null) {
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = if (bytes.size > 400_000) 2 else 1 })
+                } else if (url != null) {
+                    // network covers (database search results), cached on disk
+                    val f = java.io.File(context.cacheDir, "covers/" + url.hashCode().toUInt().toString(16) + ".img")
+                    if (!f.exists()) {
+                        f.parentFile?.mkdirs()
+                        com.koro.kororythm.tags.TagSearch.fetchCover(url)?.let { f.writeBytes(it) }
+                    }
+                    if (f.exists()) BitmapFactory.decodeFile(f.absolutePath, BitmapFactory.Options().apply { inSampleSize = 2 }) else null
+                } else if (contentUri != null) {
                     context.contentResolver.openInputStream(Uri.parse(contentUri))?.use { ins ->
                         BitmapFactory.decodeStream(ins, null, BitmapFactory.Options().apply { inSampleSize = 2 })
                     }
@@ -160,7 +178,7 @@ fun ArtThumb(path: String?, modifier: Modifier = Modifier, size: Dp = 44.dp, con
         modifier
             .size(size)
             .clip(RoundedCornerShape(6.dp))
-            .background(Color(0xFF071624))
+            .background(if (Neon.isHiFi) Neon.Lcd else Color(0xFF071624))
             .neonBorder(Neon.Cyan, 6.dp, 0.35f),
         contentAlignment = Alignment.Center,
     ) {

@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <!-- MusicBrainz tag suggestions in the import wizard -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Tag editor on Android 9 and older (newer versions ask per file) -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 
     <application
         android:name=".KororythmApp"
@@ -49,5 +51,17 @@
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>
         </service>
+        <!-- Home-screen widget: mini Winamp bar -->
+        <receiver
+            android:name=".widget.KoroWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/koro_widget_info" />
+        </receiver>
     </application>
 </manifest>

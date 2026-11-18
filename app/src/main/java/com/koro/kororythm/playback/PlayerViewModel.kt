@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -131,6 +132,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app), PlayerActions {
         viewModelScope.launch {
             if (persist) uris.forEach { uri ->
                 runCatching {
+                    app.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                }.recoverCatching {
                     app.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
             }
@@ -167,6 +170,36 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app), PlayerActions {
             if (wasEmpty) c.prepare()
             saveQueue()
         }
+    }
+
+    override fun setTempo(speed: Float, keyLock: Boolean) {
+        controller?.playbackParameters = PlaybackParameters(speed, if (keyLock) 1f else speed)
+    }
+
+    private var rewriting: Triple<String, Long, Boolean>? = null
+
+    override fun releaseFile(uri: String) {
+        val c = controller ?: return
+        if (c.currentMediaItem?.mediaId == uri) {
+            rewriting = Triple(uri, c.currentPosition, c.isPlaying)
+            c.stop()
+        }
+    }
+
+    override fun fileRewritten(oldUri: String, info: TrackInfo) {
+        val c = controller ?: return
+        for (i in 0 until c.mediaItemCount) {
+            if (c.getMediaItemAt(i).mediaId == oldUri) c.replaceMediaItem(i, info.toMediaItem())
+        }
+        rewriting?.let { (uri, pos, wasPlaying) ->
+            if (uri == oldUri) {
+                c.prepare()
+                c.seekTo(pos)
+                if (wasPlaying) c.play()
+            }
+        }
+        rewriting = null
+        saveQueue()
     }
 
     override fun removeAt(index: Int) {

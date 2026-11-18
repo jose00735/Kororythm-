@@ -1,5 +1,6 @@
 package com.koro.kororythm.library
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Fts4
@@ -40,6 +41,11 @@ data class TrackEntity(
     val dateAdded: Long,
     /** Title came from the file name, or artist / album is empty. */
     val tagsMissing: Boolean,
+    /** Tempo from the analysis (null = no clear beat or not analysed yet). */
+    val bpm: Float? = null,
+    /** Volume-levelling gain in dB from the loudness analysis. */
+    val gainDb: Float? = null,
+    @ColumnInfo(defaultValue = "0") val analyzed: Boolean = false,
 ) {
     fun toTrackInfo() = TrackInfo(uri, title, artist, album, durationMs, bitrateKbps, sampleRate, bits, codec)
 }
@@ -87,6 +93,14 @@ data class SourceEntity(
         const val MEDIASTORE_KEY = "mediastore"
     }
 }
+
+/** DJ hot cue: up to four saved positions per track. */
+@Entity(
+    tableName = "hot_cues",
+    primaryKeys = ["trackId", "slot"],
+    foreignKeys = [ForeignKey(TrackEntity::class, ["id"], ["trackId"], onDelete = ForeignKey.CASCADE)],
+)
+data class HotCue(val trackId: Long, val slot: Int, val positionMs: Long)
 
 // ---- query results ----
 

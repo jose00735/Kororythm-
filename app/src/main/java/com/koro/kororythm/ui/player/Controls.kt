@@ -33,7 +33,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.koro.kororythm.ui.skin.Neon
+import com.koro.kororythm.ui.skin.hifiFace
 import com.koro.kororythm.ui.skin.neonBorder
+import androidx.compose.ui.graphics.drawscope.translate
 
 enum class TIcon { PREV, PLAY, PAUSE, STOP, NEXT, EJECT }
 
@@ -42,15 +44,25 @@ enum class TIcon { PREV, PLAY, PAUSE, STOP, NEXT, EJECT }
 fun TransportButton(icon: TIcon, onClick: () -> Unit, modifier: Modifier = Modifier, accent: Color = Neon.Cyan, size: Dp = 44.dp) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
+    val face = if (Neon.isHiFi) Modifier.background(hifiFace(pressed), RoundedCornerShape(8.dp))
+    else Modifier.background(if (pressed) accent.copy(alpha = 0.22f) else Color.Transparent, RoundedCornerShape(8.dp))
+    val iconColor = when {
+        Neon.isHiFi -> if (accent == Neon.Cyan) Neon.Ink else accent
+        pressed -> Neon.Ink
+        else -> accent
+    }
     Box(
         modifier
             .size(size)
-            .background(if (pressed) accent.copy(alpha = 0.22f) else Color.Transparent, RoundedCornerShape(8.dp))
+            .then(face)
             .neonBorder(accent, 8.dp, if (pressed) 1f else 0.55f)
             .clickable(interactionSource = source, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(size * 0.42f)) { drawTransportIcon(icon, if (pressed) Neon.Ink else accent) }
+        Canvas(Modifier.size(size * 0.42f)) {
+            if (Neon.isHiFi) translate(0f, 1.2f) { drawTransportIcon(icon, Color.White.copy(alpha = 0.6f)) } // engraved highlight
+            drawTransportIcon(icon, iconColor)
+        }
     }
 }
 
@@ -109,8 +121,19 @@ fun NeonSeekBar(positionMs: Long, durationMs: Long, onSeek: (Long) -> Unit, modi
     ) {
         val y = size.height / 2
         val track = 3.dp.toPx()
-        drawRoundRect(Neon.Cyan.copy(alpha = 0.18f), Offset(0f, y - track / 2), Size(size.width, track), CornerRadius(track))
         val x = size.width * fraction
+        if (Neon.isHiFi) {
+            // machined groove, green fill, chrome knob
+            drawRoundRect(Color(0xFF3A4047), Offset(0f, y - track), Size(size.width, track * 2), CornerRadius(track))
+            drawRoundRect(Color.White.copy(alpha = 0.6f), Offset(0f, y + track), Size(size.width, 1f))
+            drawRoundRect(Neon.LcdText, Offset(0f, y - track / 2), Size(x, track), CornerRadius(track))
+            val kw = 18.dp.toPx(); val kh = 14.dp.toPx()
+            drawRoundRect(Color.Black.copy(alpha = 0.25f), Offset(x - kw / 2 + 1, y - kh / 2 + 2), Size(kw, kh), CornerRadius(3.dp.toPx()))
+            drawRoundRect(hifiFace(false), Offset(x - kw / 2, y - kh / 2), Size(kw, kh), CornerRadius(3.dp.toPx()))
+            drawLine(Color(0xFF59616A), Offset(x, y - kh / 2 + 3), Offset(x, y + kh / 2 - 3), 1.5f)
+            return@Canvas
+        }
+        drawRoundRect(Neon.Cyan.copy(alpha = 0.18f), Offset(0f, y - track / 2), Size(size.width, track), CornerRadius(track))
         drawRoundRect(Neon.Cyan.copy(alpha = 0.3f), Offset(0f, y - track * 1.5f), Size(x, track * 3), CornerRadius(track))
         drawRoundRect(Neon.Cyan, Offset(0f, y - track / 2), Size(x, track), CornerRadius(track))
         drawCircle(Neon.Orange.copy(alpha = 0.35f), 10.dp.toPx(), Offset(x, y))
@@ -147,9 +170,18 @@ fun NeonVSlider(value: Float, onChange: (Float) -> Unit, modifier: Modifier = Mo
             val y = h * i / 8f
             drawLine(Neon.Dim.copy(alpha = 0.5f), Offset(cx - 7.dp.toPx(), y), Offset(cx - 4.dp.toPx(), y), 1f)
         }
-        drawLine(accent.copy(alpha = 0.25f), Offset(cx, 0f), Offset(cx, h), 3.dp.toPx())
         val y0 = h / 2
         val yv = h * (1f - (value / range + 1f) / 2f)
+        if (Neon.isHiFi) {
+            drawLine(Color(0xFF2E3338), Offset(cx, 0f), Offset(cx, h), 4.dp.toPx())
+            drawLine(Color.White.copy(alpha = 0.6f), Offset(cx + 2.dp.toPx(), 0f), Offset(cx + 2.dp.toPx(), h), 1f)
+            val tw = 20.dp.toPx(); val th = 11.dp.toPx()
+            drawRoundRect(Color.Black.copy(alpha = 0.25f), Offset(cx - tw / 2 + 1, yv - th / 2 + 2), Size(tw, th), CornerRadius(2.dp.toPx()))
+            drawRoundRect(hifiFace(false), Offset(cx - tw / 2, yv - th / 2), Size(tw, th), CornerRadius(2.dp.toPx()))
+            drawLine(if (value >= 0) accent else Neon.Orange, Offset(cx - tw / 2 + 3, yv), Offset(cx + tw / 2 - 3, yv), 2f)
+            return@Canvas
+        }
+        drawLine(accent.copy(alpha = 0.25f), Offset(cx, 0f), Offset(cx, h), 3.dp.toPx())
         val c = if (value >= 0) accent else Neon.Orange
         drawLine(c.copy(alpha = 0.35f), Offset(cx, y0), Offset(cx, yv), 7.dp.toPx())
         drawLine(c, Offset(cx, y0), Offset(cx, yv), 3.dp.toPx())
@@ -163,4 +195,58 @@ fun formatTime(ms: Long): String {
     val total = (ms / 1000).coerceAtLeast(0)
     val h = total / 3600; val m = (total % 3600) / 60; val s = total % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+}
+
+/**
+ * Horizontal neon slider for the DJ panel. [center] draws a detent mark (e.g. 0 % tempo);
+ * double-tap jumps back to it.
+ */
+@Composable
+fun NeonHSlider(
+    value: Float,
+    onChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    range: ClosedFloatingPointRange<Float> = 0f..1f,
+    center: Float? = null,
+    accent: Color = Neon.Cyan,
+) {
+    val change by rememberUpdatedState(onChange)
+    val lo = range.start; val hi = range.endInclusive
+    fun at(x: Float, w: Float) = (lo + (x / w).coerceIn(0f, 1f) * (hi - lo))
+    Canvas(
+        modifier
+            .fillMaxWidth()
+            .height(30.dp)
+            .pointerInput(lo, hi, center) {
+                detectTapGestures(
+                    onDoubleTap = { center?.let { change(it) } },
+                    onTap = { o -> change(at(o.x, size.width.toFloat())) },
+                )
+            }
+            .pointerInput(lo, hi) {
+                detectHorizontalDragGestures { c, _ -> change(at(c.position.x, size.width.toFloat())) }
+            },
+    ) {
+        val y = size.height / 2
+        val f = ((value - lo) / (hi - lo)).coerceIn(0f, 1f)
+        val x = size.width * f
+        val track = 3.dp.toPx()
+        if (Neon.isHiFi) {
+            drawRoundRect(Color(0xFF3A4047), Offset(0f, y - track), Size(size.width, track * 2), CornerRadius(track))
+        } else {
+            drawRoundRect(accent.copy(alpha = 0.18f), Offset(0f, y - track / 2), Size(size.width, track), CornerRadius(track))
+        }
+        val cx = center?.let { size.width * ((it - lo) / (hi - lo)) } ?: 0f
+        center?.let { drawLine(Neon.Dim, Offset(cx, y - 9.dp.toPx()), Offset(cx, y + 9.dp.toPx()), 1.5f) }
+        val from = minOf(cx, x); val to = maxOf(cx, x)
+        drawRoundRect(if (Neon.isHiFi) Neon.LcdText else accent, Offset(from, y - track / 2), Size(to - from, track), CornerRadius(track))
+        if (Neon.isHiFi) {
+            val kw = 18.dp.toPx(); val kh = 16.dp.toPx()
+            drawRoundRect(hifiFace(false), Offset(x - kw / 2, y - kh / 2), Size(kw, kh), CornerRadius(3.dp.toPx()))
+            drawLine(Color(0xFF59616A), Offset(x, y - kh / 2 + 3), Offset(x, y + kh / 2 - 3), 1.5f)
+        } else {
+            drawCircle(Neon.Orange.copy(alpha = 0.35f), 11.dp.toPx(), Offset(x, y))
+            drawCircle(Neon.Orange, 6.dp.toPx(), Offset(x, y))
+        }
+    }
 }

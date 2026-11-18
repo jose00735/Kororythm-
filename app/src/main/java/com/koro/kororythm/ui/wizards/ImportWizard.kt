@@ -286,12 +286,12 @@ private fun ReviewCard(t: TrackEntity, s: SuggestState?, cb: ImportCallbacks) {
         s?.error?.let { NeonText(it, Modifier.padding(top = 6.dp), size = 10.sp, color = Neon.Orange, glow = null) }
         s?.items?.forEach { sug ->
             Row(
-                Modifier.fillMaxWidth().padding(top = 6.dp).background(Color(0x66000000), RoundedCornerShape(6.dp)).padding(8.dp),
+                Modifier.fillMaxWidth().padding(top = 6.dp).background(Neon.Lcd, RoundedCornerShape(6.dp)).padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    NeonText(sug.title, size = 12.sp, color = Neon.Cyan, glow = null)
-                    NeonText(listOfNotNull(sug.artist, sug.album, sug.year?.toString()).joinToString(" · "), size = 10.sp, color = Neon.Dim, glow = null)
+                    NeonText(sug.title, size = 12.sp, color = Neon.LcdText, glow = null)
+                    NeonText(listOfNotNull(sug.artist, sug.album, sug.year?.toString()).joinToString(" · "), size = 10.sp, color = Neon.LcdText.copy(alpha = 0.65f), glow = null)
                 }
                 NeonButton("USE", { cb.apply(t, sug) }, accent = Neon.Orange)
             }

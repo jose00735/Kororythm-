@@ -90,7 +90,10 @@ class ImportViewModel(app: Application) : AndroidViewModel(app) {
 
     fun addFolder(tree: Uri) = viewModelScope.launch {
         val app = getApplication<Application>()
+        // Read + write, so the tag editor can save into files in this folder.
         runCatching {
+            app.contentResolver.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        }.recoverCatching {
             app.contentResolver.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         dao.upsertSource(SourceEntity(tree.toString(), folderLabel(tree), System.currentTimeMillis()))
@@ -101,7 +104,7 @@ class ImportViewModel(app: Application) : AndroidViewModel(app) {
         dao.deleteSourceTracks("folder", src.key)
         runCatching {
             getApplication<Application>().contentResolver
-                .releasePersistableUriPermission(Uri.parse(src.key), Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                .releasePersistableUriPermission(Uri.parse(src.key), Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         }
     }
 

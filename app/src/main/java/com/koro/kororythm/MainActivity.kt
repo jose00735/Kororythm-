@@ -22,12 +22,16 @@ import com.koro.kororythm.playback.PlayerViewModel
 import com.koro.kororythm.ui.library.LibraryScreen
 import com.koro.kororythm.ui.library.LibraryViewModel
 import com.koro.kororythm.ui.player.PlayerScreen
+import com.koro.kororythm.ui.tags.TagEditViewModel
+import com.koro.kororythm.ui.tags.TagEditorScreen
+import com.koro.kororythm.ui.dj.DjScreen
+import com.koro.kororythm.ui.dj.DjViewModel
 import com.koro.kororythm.ui.wizards.AlbumWizardScreen
 import com.koro.kororythm.ui.wizards.AlbumWizardViewModel
 import com.koro.kororythm.ui.wizards.ImportViewModel
 import com.koro.kororythm.ui.wizards.ImportWizardScreen
 
-enum class Screen { PLAYER, LIBRARY, IMPORT, ALBUM }
+enum class Screen { PLAYER, LIBRARY, IMPORT, ALBUM, TAGS, DJ }
 
 class MainActivity : ComponentActivity() {
 
@@ -35,6 +39,8 @@ class MainActivity : ComponentActivity() {
     private val libraryVm: LibraryViewModel by viewModels()
     private val importVm: ImportViewModel by viewModels()
     private val albumVm: AlbumWizardViewModel by viewModels()
+    private val tagVm: TagEditViewModel by viewModels()
+    private val djVm: DjViewModel by viewModels()
 
     /** System file picker; Kororythm keeps read access so the playlist survives restarts. */
     private val picker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -47,8 +53,12 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             var screen by rememberSaveable { mutableStateOf(Screen.PLAYER) }
+            var tagsReturn by rememberSaveable { mutableStateOf(Screen.PLAYER) }
             val playerState by vm.state.collectAsStateWithLifecycle()
+            val openTags: (String) -> Unit = { uri -> tagVm.load(uri); tagsReturn = screen; screen = Screen.TAGS }
             BackHandler(enabled = screen == Screen.IMPORT || screen == Screen.ALBUM) { screen = Screen.LIBRARY }
+            BackHandler(enabled = screen == Screen.TAGS) { screen = tagsReturn }
+            BackHandler(enabled = screen == Screen.DJ) { screen = Screen.PLAYER }
 
             AnimatedContent(screen, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "screen") { s ->
                 when (s) {
@@ -56,18 +66,23 @@ class MainActivity : ComponentActivity() {
                         vm,
                         onAddFiles = { picker.launch(AUDIO_TYPES) },
                         onOpenLibrary = { screen = Screen.LIBRARY },
+                        onEditTags = openTags,
+                        onOpenDj = { screen = Screen.DJ },
                     )
                     Screen.LIBRARY -> LibraryScreen(
                         libraryVm, vm, playerState.current?.uri,
                         onBack = { screen = Screen.PLAYER },
                         onImport = { importVm.restart(); screen = Screen.IMPORT },
                         onNewAlbum = { albumVm.startOver(); screen = Screen.ALBUM },
+                        onEditTags = openTags,
                     )
                     Screen.IMPORT -> ImportWizardScreen(
                         importVm,
                         onClose = { screen = Screen.LIBRARY },
                         onOpenLibrary = { screen = Screen.LIBRARY },
                     )
+                    Screen.TAGS -> TagEditorScreen(tagVm, vm, onClose = { screen = tagsReturn })
+                    Screen.DJ -> DjScreen(djVm, vm, onClose = { screen = Screen.PLAYER })
                     Screen.ALBUM -> AlbumWizardScreen(
                         albumVm,
                         onClose = { screen = Screen.LIBRARY },

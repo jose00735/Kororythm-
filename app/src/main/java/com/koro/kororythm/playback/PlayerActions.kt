@@ -26,4 +26,13 @@ interface PlayerActions {
 
     /** Adds [tracks] to the end of the queue (library "add"). */
     fun enqueue(tracks: List<TrackInfo>) {}
+
+    /** Turntable pitch fader: speed 0.92..1.08; with key lock the pitch stays put. */
+    fun setTempo(speed: Float, keyLock: Boolean) {}
+
+    /** The tag editor is about to rewrite [uri]: stop reading it if it's playing. */
+    fun releaseFile(uri: String) {}
+
+    /** The file was rewritten (and maybe renamed): refresh it in the queue and resume. */
+    fun fileRewritten(oldUri: String, info: TrackInfo) {}
 }

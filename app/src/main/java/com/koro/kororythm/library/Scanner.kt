@@ -46,7 +46,6 @@ class Scanner(private val context: Context, private val dao: LibraryDao) {
 
     private class Candidate(val uri: Uri, val name: String, val size: Long, val source: String, val root: String?)
 
-    private val artDir = File(context.filesDir, "art").apply { mkdirs() }
     private val keyLock = Mutex()
 
     suspend fun scan(sources: List<SourceEntity>, onProgress: suspend (ScanProgress) -> Unit): ScanResult =
@@ -134,7 +133,7 @@ class Scanner(private val context: Context, private val dao: LibraryDao) {
             val mime = s(MediaMetadataRetriever.METADATA_KEY_MIMETYPE)
             val rate = if (Build.VERSION.SDK_INT >= 31) s(MediaMetadataRetriever.METADATA_KEY_SAMPLERATE)?.toIntOrNull() else null
             val bits = if (Build.VERSION.SDK_INT >= 31) s(MediaMetadataRetriever.METADATA_KEY_BITS_PER_SAMPLE)?.toIntOrNull()?.takeIf { it > 0 } else null
-            val art = r.embeddedPicture?.let { saveArt(it, key) }
+            val art = r.embeddedPicture?.let { ArtStore.save(context, it) }
             return TrackEntity(
                 uri = c.uri.toString(),
                 title = tagTitle ?: nameTitle,
@@ -167,23 +166,6 @@ class Scanner(private val context: Context, private val dao: LibraryDao) {
             r.release()
         }
     }
-
-    /** Saves a 320 px JPEG of the cover; tracks of one album share the file. */
-    private fun saveArt(bytes: ByteArray, key: String): String? = runCatching {
-        val name = TagRules.contentKey(bytes, minOf(bytes.size, 16 * 1024), bytes.size.toLong()).take(16) + ".jpg"
-        val out = File(artDir, name)
-        if (!out.exists()) {
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-            var sample = 1
-            while (bounds.outWidth / (sample * 2) >= 320) sample *= 2
-            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
-                ?: return@runCatching null
-            out.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 85, it) }
-            bmp.recycle()
-        }
-        out.absolutePath
-    }.getOrNull()
 
     // ---- listing ----
 

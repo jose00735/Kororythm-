@@ -14,8 +14,8 @@ android {
         applicationId = "com.koro.kororythm"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0-phase2"
+        versionCode = 10
+        versionName = "1.0.0"
     }
 
     buildTypes {
@@ -65,6 +65,7 @@ dependencies {
     implementation("androidx.room:room-ktx:$room")
     ksp("androidx.room:room-compiler:$room")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
+    implementation("androidx.glance:glance-appwidget:1.1.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303") // real org.json for JVM tests
