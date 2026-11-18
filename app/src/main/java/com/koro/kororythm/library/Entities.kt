@@ -173,6 +173,8 @@ data class UserAlbumSummary(
     val durationMs: Long,
 )
 
+data class GenreUpdate(val id: Long, val main: String?, val sub: String?, val checkedAt: Long)
+
 data class GenreCount(val genreMain: String?, val subGenre: String?, val count: Int)
 
 data class PlaylistSummary(

@@ -26,6 +26,12 @@ object MusicBrainz {
     @Volatile var lastFailed = false
         private set
 
+    /** Some [get] since [resetFailed] failed for network reasons. */
+    @Volatile var failedSinceReset = false
+        private set
+
+    fun resetFailed() { failedSinceReset = false }
+
     /** Builds a Lucene query: recording:"title" AND artist:"artist". */
     fun buildQuery(title: String, artist: String?): String {
         fun q(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
@@ -74,11 +80,12 @@ object MusicBrainz {
             conn.readTimeout = 15_000
             when (conn.responseCode) {
                 200 -> { lastFailed = false; conn.inputStream.bufferedReader().use { it.readText() } }
-                503 -> { lastFailed = true; delay(3000); null } // rate-limited: back off
+                503 -> { lastFailed = true; failedSinceReset = true; delay(3000); null } // rate-limited: back off
                 else -> { lastFailed = false; null } // e.g. 404: nothing there
             }
         } catch (e: java.io.IOException) {
             lastFailed = true
+            failedSinceReset = true
             null
         } finally {
             conn.disconnect()

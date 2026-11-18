@@ -80,6 +80,19 @@ abstract class LibraryDao {
     @Query("UPDATE tracks SET genreChecked = 0")
     abstract suspend fun recheckAllGenres()
 
+    /** Songs whose file has a genre that hasn't been sorted into main / sub-genre yet. */
+    @Query("SELECT * FROM tracks WHERE genreMain IS NULL AND genre IS NOT NULL AND genre != ''")
+    abstract suspend fun unsortedFileGenres(): List<TrackEntity>
+
+    @Query("SELECT id FROM tracks WHERE genreChecked = 0 ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE")
+    abstract suspend fun genreUncheckedIds(): List<Long>
+
+    /** Many genre results in one write, so the library lists reload once instead of per song. */
+    @Transaction
+    open suspend fun setGenres(rows: List<GenreUpdate>) {
+        rows.forEach { setGenre(it.id, it.main, it.sub, it.checkedAt) }
+    }
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     abstract suspend fun insert(t: TrackEntity): Long
 

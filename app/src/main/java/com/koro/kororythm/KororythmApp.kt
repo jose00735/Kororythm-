@@ -1,6 +1,7 @@
 package com.koro.kororythm
 
 import android.app.Application
+import kotlinx.coroutines.launch
 import com.koro.kororythm.devices.DeviceWatcher
 import com.koro.kororythm.dsp.EqStore
 import com.koro.kororythm.library.ImportWorker
@@ -18,6 +19,10 @@ class KororythmApp : Application() {
         com.koro.kororythm.dj.DjStore.init(this)
         Library.init(this)
         ImportWorker.schedulePeriodic(this)
+        // Songs whose files carry a genre get sorted right away (no network needed).
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            runCatching { com.koro.kororythm.genres.GenreWorker.sortFileGenres(Library.dao) }
+        }
         deviceWatcher = DeviceWatcher(this).also { it.start() }
     }
 }

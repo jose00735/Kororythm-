@@ -75,6 +75,37 @@ object GenreMap {
         return main to sub
     }
 
+    // Old ID3v1 genre numbers ("(20)" or "20" in some MP3s).
+    private val ID3V1 = listOf(
+        "Blues", "Classic Rock", "Country", "Dance", "Disco", "Funk", "Grunge", "Hip-Hop", "Jazz", "Metal",
+        "New Age", "Oldies", "Other", "Pop", "R&B", "Rap", "Reggae", "Rock", "Techno", "Industrial",
+        "Alternative", "Ska", "Death Metal", "Pranks", "Soundtrack", "Euro-Techno", "Ambient", "Trip-Hop", "Vocal", "Jazz+Funk",
+        "Fusion", "Trance", "Classical", "Instrumental", "Acid", "House", "Game", "Sound Clip", "Gospel", "Noise",
+        "Alternative Rock", "Bass", "Soul", "Punk", "Space", "Meditative", "Instrumental Pop", "Instrumental Rock", "Ethnic", "Gothic",
+        "Darkwave", "Techno-Industrial", "Electronic", "Pop-Folk", "Eurodance", "Dream", "Southern Rock", "Comedy", "Cult", "Gangsta",
+        "Top 40", "Christian Rap", "Pop/Funk", "Jungle", "Native American", "Cabaret", "New Wave", "Psychedelic", "Rave", "Showtunes",
+        "Trailer", "Lo-Fi", "Tribal", "Acid Punk", "Acid Jazz", "Polka", "Retro", "Musical", "Rock & Roll", "Hard Rock",
+    )
+
+    /** The genre text in a file, split into names ("Rock; Alternative", "(17)", "Pop/Funk" kept whole when it's an ID3 name). */
+    fun fileGenres(raw: String?): List<String> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return raw.split(';', ',', '\u0000', '|').flatMap { part ->
+            val p = part.trim()
+            // "(17)", "(17)Rock" or a bare "17"; not "80s" or "2 Tone"
+            val num = Regex("^\\((\\d{1,3})\\)(.*)$").find(p) ?: Regex("^(\\d{1,3})()$").find(p)
+            when {
+                p.isEmpty() -> emptyList()
+                num != null -> listOfNotNull(ID3V1.getOrNull(num.groupValues[1].toInt()), num.groupValues[2].trim().takeIf { it.isNotEmpty() })
+                ID3V1.any { it.equals(p, ignoreCase = true) } -> listOf(p)
+                else -> p.split('/').map { it.trim() }.filter { it.isNotEmpty() }
+            }
+        }
+    }
+
+    /** Main + sub-genre from the file's own genre alone (instant, no network). */
+    fun fromFile(raw: String?): Pair<String?, String?> = classify(fileGenres(raw).map { Vote(it, 6.0) })
+
     /** "drum and bass" → "Drum and Bass", "synth-pop" → "Synth-Pop", "r&b" stays sensible. */
     fun pretty(name: String): String {
         val small = setOf("and", "of", "the", "n", "y", "de", "la")

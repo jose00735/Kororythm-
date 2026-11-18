@@ -152,8 +152,9 @@ class Scanner(private val context: Context, private val dao: LibraryDao) {
                     dao.update(
                         entity.copy(
                             id = existing.id, bpm = existing.bpm, gainDb = existing.gainDb, analyzed = existing.analyzed,
-                            genreMain = if (sameGenre) existing.genreMain else null, subGenre = if (sameGenre) existing.subGenre else null,
-                            genreChecked = if (sameGenre) existing.genreChecked else 0,
+                            genreMain = if (sameGenre) existing.genreMain ?: entity.genreMain else entity.genreMain,
+                            subGenre = if (sameGenre) existing.subGenre ?: entity.subGenre else entity.subGenre,
+                            genreChecked = if (sameGenre) existing.genreChecked else entity.genreChecked,
                         ),
                     )
                     ScanResult(updated = 1)
@@ -205,7 +206,11 @@ class Scanner(private val context: Context, private val dao: LibraryDao) {
                 sourceRoot = c.root,
                 dateAdded = existing?.dateAdded ?: System.currentTimeMillis(),
                 tagsMissing = TagRules.tagsMissing(tagTitle, artist ?: nameArtist, album),
-            )
+            ).let { t ->
+                // The file's own genre is sorted at once; the online lookup only adds detail later.
+                val (main, sub) = com.koro.kororythm.genres.GenreMap.fromFile(t.genre)
+                t.copy(genreMain = main, subGenre = sub, genreChecked = if (sub != null) System.currentTimeMillis() else 0)
+            }
         } finally {
             r.release()
         }

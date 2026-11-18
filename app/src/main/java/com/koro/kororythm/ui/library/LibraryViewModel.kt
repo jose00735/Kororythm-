@@ -7,6 +7,7 @@ import com.koro.kororythm.library.AlbumSummary
 import com.koro.kororythm.library.ArtistSummary
 import com.koro.kororythm.library.Library
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import com.koro.kororythm.library.Decades
 import com.koro.kororythm.library.PlaylistSummary
 import com.koro.kororythm.library.TagRules
@@ -97,7 +98,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- decade filter: applies to tracks, albums, artists, genres and any open list ----
     private val decades = MutableStateFlow<Set<Int>>(emptySet())
-    private val all = dao.allTracks()
+    private val all = dao.allTracks().distinctUntilChanged()
     private val inDecades = combine(all, decades) { l, d -> if (d.isEmpty()) l else l.filter { Decades.matches(d, it.year) } }
     private val decadeCounts = all.map { l ->
         l.groupingBy { Decades.of(it.year) }.eachCount().toList()

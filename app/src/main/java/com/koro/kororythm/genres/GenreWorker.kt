@@ -1,6 +1,7 @@
 package com.koro.kororythm.genres
 
 import android.content.Context
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
@@ -9,7 +10,9 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.koro.kororythm.library.GenreUpdate
 import com.koro.kororythm.library.Library
+import com.koro.kororythm.library.LibraryDao
 import com.koro.kororythm.library.MusicBrainz
 import com.koro.kororythm.library.TrackEntity
 import kotlinx.coroutines.Dispatchers
@@ -17,11 +20,14 @@ import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.util.concurrent.TimeUnit
 
 /**
- * Fills in genre and sub-genre for tracks that haven't been looked up yet:
- * the file's own genre, MusicBrainz tags of the recording, genres of its album and artist,
- * and iTunes' genre as a fallback. Albums and artists are asked once each per run.
+ * Fills in genre and sub-genre for tracks that haven't been looked up yet.
+ * First, instantly, from each file's own genre; then online for the rest: MusicBrainz tags of
+ * the recording, genres of its album and artist (each asked once), and iTunes as a fallback.
+ * A song whose lookup fails is skipped (tried again on the next run) instead of stalling the run,
+ * and results are saved in batches so the library doesn't reload after every song.
  */
 class GenreWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
@@ -31,28 +37,42 @@ class GenreWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
 
     override suspend fun doWork(): Result {
         val dao = Library.dao
+        sortFileGenres(dao)
+
+        val ids = dao.genreUncheckedIds()
         var done = 0
         var found = 0
-        while (!isStopped) {
-            val batch = dao.genreUnchecked(40)
-            if (batch.isEmpty()) break
-            for (t in batch) {
-                if (isStopped) break
+        var failed = 0
+        var failStreak = 0
+        val pending = mutableListOf<GenreUpdate>()
+        suspend fun flush() { if (pending.isNotEmpty()) { dao.setGenres(pending.toList()); pending.clear() } }
+
+        for (chunk in ids.chunked(50)) {
+            for (t in dao.byIds(chunk).sortedBy { (it.artist ?: "").lowercase() }) {
+                if (isStopped) { flush(); return Result.success() }
+                setProgress(workDataOf(K_DONE to done, K_FOUND to found, K_LEFT to ids.size - done, K_CURRENT to "${t.artist ?: "?"} – ${t.title}"))
+                MusicBrainz.resetFailed()
                 val (main, sub) = runCatching { lookup(t) }.getOrElse { null to null }
-                // Offline or rate-limited: leave it for the next run instead of marking it "no genre".
-                if (main == null && MusicBrainz.lastFailed) return Result.retry()
-                dao.setGenre(t.id, main ?: t.genreMain, sub ?: t.subGenre, System.currentTimeMillis())
+                if (main == null && MusicBrainz.failedSinceReset) {
+                    // Offline / rate-limited: leave this one for the next run and move on.
+                    failed++
+                    if (++failStreak >= 6) { flush(); return Result.retry() }
+                } else {
+                    failStreak = 0
+                    pending += GenreUpdate(t.id, main ?: t.genreMain, sub ?: t.subGenre, System.currentTimeMillis())
+                    if (main != null) found++
+                }
                 done++
-                if (main != null) found++
-                setProgress(workDataOf(K_DONE to done, K_FOUND to found, K_CURRENT to "${t.artist ?: "?"} – ${t.title}"))
+                if (pending.size >= 10) flush()
             }
         }
-        return Result.success(workDataOf(K_DONE to done, K_FOUND to found))
+        flush()
+        return if (failed > 0) Result.retry() else Result.success(workDataOf(K_DONE to done, K_FOUND to found))
     }
 
     private suspend fun lookup(t: TrackEntity): Pair<String?, String?> {
         val votes = mutableListOf<Vote>()
-        t.genre?.split(';', '/', ',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.forEach { votes += Vote(it, 6.0) }
+        GenreMap.fileGenres(t.genre).forEach { votes += Vote(it, 6.0) }
         val artist = t.artist?.takeIf { it.isNotBlank() }
         if (artist != null) {
             val q = MusicBrainz.buildQuery(t.title, artist)
@@ -94,12 +114,27 @@ class GenreWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
         const val UNIQUE = "koro-genres"
         const val K_DONE = "done"
         const val K_FOUND = "found"
+        const val K_LEFT = "left"
         const val K_CURRENT = "current"
 
-        /** Looks up genres for every track not checked yet (keeps going if already running). */
+        /**
+         * Sorts every song whose file already says its genre (no network, a second at most).
+         * A song whose file genre gives a sub-genre too needs no online lookup.
+         */
+        suspend fun sortFileGenres(dao: LibraryDao) {
+            val now = System.currentTimeMillis()
+            val rows = dao.unsortedFileGenres().mapNotNull { t ->
+                val (main, sub) = GenreMap.fromFile(t.genre)
+                main?.let { GenreUpdate(t.id, it, sub, if (sub != null) now else t.genreChecked) }
+            }
+            rows.chunked(200).forEach { dao.setGenres(it) }
+        }
+
+        /** Looks up genres for every track not checked yet. */
         fun runNow(context: Context) {
             val req = OneTimeWorkRequestBuilder<GenreWorker>()
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setBackoffCriteria(BackoffPolicy.LINEAR, 2, TimeUnit.MINUTES)
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(UNIQUE, ExistingWorkPolicy.APPEND_OR_REPLACE, req)
         }

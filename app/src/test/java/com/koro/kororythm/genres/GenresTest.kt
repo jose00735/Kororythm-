@@ -65,4 +65,18 @@ class GenresTest {
         assertEquals("Vallenato", GenreParse.itunesGenre(itunes, "Silvestre Dangond"))
         assertEquals("Latin" to "Vallenato", GenreMap.classify(listOf(Vote("Vallenato", 2.0))))
     }
+
+    @Test fun fileGenresAreSortedWithoutNetwork() {
+        assertEquals("Rock" to "Alternative", GenreMap.fromFile("Alternative"))
+        assertEquals("Rock" to "Alternative", GenreMap.fromFile("(20)"))
+        assertEquals(listOf("Hard Rock"), GenreMap.fileGenres("79"))
+        assertEquals(listOf("Rock", "Indie"), GenreMap.fileGenres("(17)Indie"))
+        assertEquals(listOf("Rock", "Alternative"), GenreMap.fileGenres("Rock; Alternative"))
+        assertEquals(listOf("80s"), GenreMap.fileGenres("80s"))
+        assertEquals(listOf("Pop/Funk"), GenreMap.fileGenres("Pop/Funk"))
+        assertEquals(listOf("Hip Hop", "Rap"), GenreMap.fileGenres("Hip Hop/Rap"))
+        assertEquals("Latin" to "Salsa y Tropical", GenreMap.fromFile("Salsa y Tropical"))
+        assertEquals("Rock" to null, GenreMap.fromFile("Rock"))
+        assertEquals(null to null, GenreMap.fromFile(""))
+    }
 }
