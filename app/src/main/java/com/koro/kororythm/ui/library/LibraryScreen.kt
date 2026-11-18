@@ -64,6 +64,7 @@ open class LibraryCallbacks {
     open fun import() {}
     open fun newAlbum() {}
     open fun editTags(t: TrackEntity) {}
+    open fun downloads() {}
 }
 
 @Composable
@@ -75,6 +76,7 @@ fun LibraryScreen(
     onImport: () -> Unit,
     onNewAlbum: () -> Unit,
     onEditTags: (String) -> Unit = {},
+    onDownloads: () -> Unit = {},
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     BackHandler { if (ui.detail != null) vm.closeDetail() else onBack() }
@@ -95,6 +97,7 @@ fun LibraryScreen(
         override fun import() = onImport()
         override fun newAlbum() = onNewAlbum()
         override fun editTags(t: TrackEntity) = onEditTags(t.uri)
+        override fun downloads() = onDownloads()
     }
     LibraryContent(ui, cb, nowPlayingUri)
 }
@@ -106,6 +109,7 @@ fun LibraryContent(ui: LibraryUi, cb: LibraryCallbacks, nowPlayingUri: String? =
         onBack = { if (ui.detail != null) cb.closeDetail() else cb.back() },
         backLabel = if (ui.detail != null) "◂ BACK" else "◂ PLAYER",
         actions = {
+            NeonButton("⇩ GET", cb::downloads, accent = Neon.Orange)
             NeonButton("IMPORT", cb::import, accent = Neon.Orange)
             NeonButton("+ ALBUM", cb::newAlbum)
         },
@@ -149,6 +153,8 @@ private fun EmptyLibrary(cb: LibraryCallbacks) {
         NeonText("Bring in your FLAC and MP3 files to get started.", Modifier.padding(top = 6.dp), size = 12.sp, color = Neon.Dim, glow = null, maxLines = 2)
         Spacer(Modifier.height(16.dp))
         NeonButton("UPLOAD TO THE GRID ▸", cb::import, active = true, accent = Neon.Orange)
+        Spacer(Modifier.height(10.dp))
+        NeonButton("⇩ DOWNLOAD FROM A LINK", cb::downloads)
     }
 }
 

@@ -20,6 +20,10 @@ data class TagData(
     /** New front cover, or null to keep the existing one (unless [removeCover]). */
     val cover: Cover? = null,
     val removeCover: Boolean = false,
+    /** Lyrics to store in the file (LRC or plain); null leaves existing lyrics alone. */
+    val lyrics: String? = null,
+    /** MP3 only: where the audio really came from, e.g. "youtube;opus;160" (see Quality). */
+    val sourceNote: String? = null,
 )
 
 class Cover(val bytes: ByteArray, val mime: String) {
@@ -180,6 +184,7 @@ object TagIo {
             add("TITLE", t.title); add("ARTIST", t.artist); add("ALBUM", t.album); add("ALBUMARTIST", t.albumArtist)
             add("GENRE", t.genre); add("DATE", t.year); add("TRACKNUMBER", t.trackNo); add("TRACKTOTAL", t.trackTotal)
             add("DISCNUMBER", t.discNo)
+            add("LYRICS", t.lyrics)
         }
 
         fun write(input: File, output: File, t: TagData) {
@@ -188,7 +193,11 @@ object TagIo {
                 if (blocks.firstOrNull()?.type != STREAMINFO) throw TagWriteException("FLAC without STREAMINFO")
                 val oldVorbis = blocks.firstOrNull { it.type == VORBIS }?.let { parseVorbis(it.data) }
                 val vendor = oldVorbis?.first ?: "Kororythm"
-                val kept = oldVorbis?.second.orEmpty().filter { it.substringBefore('=').uppercase() !in MANAGED }
+                val lyricKeys = if (t.lyrics != null) setOf("LYRICS", "UNSYNCEDLYRICS") else emptySet()
+                val kept = oldVorbis?.second.orEmpty().filter {
+                    val k = it.substringBefore('=').uppercase()
+                    k !in MANAGED && k !in lyricKeys
+                }
                 val newBlocks = mutableListOf<Block>()
                 newBlocks += blocks.first()
                 blocks.drop(1).forEach { b ->
@@ -284,12 +293,35 @@ object TagIo {
             add("TRCK", t.trackNo?.let { n -> t.trackTotal?.let { "$n/$it" } ?: "$n" })
             add("TPOS", t.discNo?.toString())
             t.cover?.let { add(apic(it)) }
+            t.lyrics?.trim()?.takeIf { it.isNotEmpty() }?.let { add(uslt(it)) }
+            t.sourceNote?.let { add(txxx(Quality.SOURCE_DESC, it)) }
+        }
+
+        private fun isSourceFrame(f: Frame): Boolean =
+            f.id == "TXXX" && f.body.size > 1 &&
+                String(f.body, 1, f.body.size - 1, Charsets.UTF_8).startsWith(Quality.SOURCE_DESC + "\u0000")
+
+        /** User text frame: UTF-8 "description\0value". */
+        fun txxx(desc: String, value: String) =
+            Frame("TXXX", byteArrayOf(0, 0), byteArrayOf(3) + desc.toByteArray(Charsets.UTF_8) + byteArrayOf(0) + value.toByteArray(Charsets.UTF_8))
+
+        /** Unsynchronised lyrics: UTF-8, language "eng", empty description. */
+        fun uslt(text: String): Frame {
+            val o = ByteArrayOutputStream()
+            o.write(3)
+            o.write("eng".toByteArray(Charsets.ISO_8859_1))
+            o.write(0) // empty description, terminated
+            o.write(text.toByteArray(Charsets.UTF_8))
+            return Frame("USLT", byteArrayOf(0, 0), o.toByteArray())
         }
 
         fun write(input: File, output: File, t: TagData) {
             RandomAccessFile(input, "r").use { raf ->
                 val (old, audioStart) = readOld(raf)
-                val kept = old.filter { f -> f.id != "APIC" || (t.cover == null && !t.removeCover) }
+                val kept = old.filter { f ->
+                    (f.id != "APIC" || (t.cover == null && !t.removeCover)) && (f.id != "USLT" || t.lyrics == null) &&
+                        (t.sourceNote == null || !isSourceFrame(f))
+                }
                 val frames = kept + newFrames(t)
                 val body = ByteArrayOutputStream()
                 frames.forEach { f ->

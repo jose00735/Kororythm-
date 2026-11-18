@@ -14,8 +14,10 @@ android {
         applicationId = "com.koro.kororythm"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "1.0.0"
+        versionCode = 11
+        versionName = "1.1.0"
+        // yt-dlp ships Python/ffmpeg as native libs: phones only (keeps the APK smaller)
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     buildTypes {
@@ -33,6 +35,8 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
+    // youtubedl-android runs its bundled binaries from the extracted native-lib folder
+    packaging { jniLibs { useLegacyPackaging = true } }
     testOptions {
         unitTests.all { it.maxHeapSize = "2g" }
     }
@@ -66,6 +70,11 @@ dependencies {
     ksp("androidx.room:room-compiler:$room")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("androidx.glance:glance-appwidget:1.1.1")
+
+    // yt-dlp + Python + ffmpeg for the Downloads screen (GPL-3.0)
+    val ytdl = "0.18.1"
+    implementation("io.github.junkfood02.youtubedl-android:library:$ytdl")
+    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:$ytdl")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303") // real org.json for JVM tests

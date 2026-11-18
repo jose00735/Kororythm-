@@ -112,4 +112,18 @@ class TagIoTest {
         assertTrue(comments.contains("TITLE=Only title"))
         assertTrue(comments.none { it.uppercase().startsWith("ARTIST=") })
     }
+
+    @Test fun lyricsAreWrittenAndKeptOnLaterEdits() {
+        val lrc = "[00:01.00] Ñandú en la noche\n[00:02.50] second line"
+        val withLyrics = roundTrip("in16.flac", "lyrics.flac", tags.copy(lyrics = lrc))
+        val later = File(out, "lyrics_kept.flac").also { TagIo.write(withLyrics, it, tags.copy(title = "Renamed")) }
+        val vorbis = RandomAccessFile(later, "r").use { raf -> TagIo.Flac.readBlocks(raf).first.first { it.type == 4 } }
+        val (_, comments) = TagIo.Flac.parseVorbis(vorbis.data)
+        assertTrue("lyrics survive a tag edit", comments.contains("LYRICS=$lrc"))
+        assertTrue(comments.contains("TITLE=Renamed"))
+
+        val mp3 = roundTrip("in_v24.mp3", "lyrics.mp3", tags.copy(lyrics = lrc))
+        val mp3Later = File(out, "lyrics_kept.mp3").also { TagIo.write(mp3, it, tags) }
+        assertArrayEquals(mp3Audio(File(res, "in_v24.mp3")), mp3Audio(mp3Later))
+    }
 }

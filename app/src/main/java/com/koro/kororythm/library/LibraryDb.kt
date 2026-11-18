@@ -152,11 +152,83 @@ abstract class LibraryDao {
 
     @Query("DELETE FROM hot_cues WHERE trackId = :trackId AND slot = :slot")
     abstract suspend fun clearCue(trackId: Long, slot: Int)
+
+    // ---- playlists (v1.1) ----
+    @Query(
+        """SELECT p.id, p.name, COUNT(t.trackId) AS trackCount, COALESCE(SUM(tr.durationMs), 0) AS durationMs,
+           (SELECT tr2.artPath FROM playlist_tracks x JOIN tracks tr2 ON tr2.id = x.trackId
+              WHERE x.playlistId = p.id AND tr2.artPath IS NOT NULL ORDER BY x.position LIMIT 1) AS artPath
+           FROM playlists p
+           LEFT JOIN playlist_tracks t ON t.playlistId = p.id
+           LEFT JOIN tracks tr ON tr.id = t.trackId
+           GROUP BY p.id ORDER BY p.name COLLATE NOCASE""",
+    )
+    abstract fun playlists(): Flow<List<PlaylistSummary>>
+
+    @Query(
+        "SELECT tracks.* FROM playlist_tracks JOIN tracks ON tracks.id = playlist_tracks.trackId " +
+            "WHERE playlistId = :id ORDER BY position",
+    )
+    abstract suspend fun playlistTracks(id: Long): List<TrackEntity>
+
+    @Insert
+    abstract suspend fun insertPlaylist(p: PlaylistEntity): Long
+
+    @Query("UPDATE playlists SET name = :name WHERE id = :id")
+    abstract suspend fun renamePlaylist(id: Long, name: String)
+
+    @Query("DELETE FROM playlists WHERE id = :id")
+    abstract suspend fun deletePlaylist(id: Long)
+
+    @Query("DELETE FROM playlist_tracks WHERE playlistId = :id")
+    abstract suspend fun clearPlaylistTracks(id: Long)
+
+    @Insert
+    abstract suspend fun insertPlaylistTracks(rows: List<PlaylistTrack>)
+
+    @Query("SELECT COALESCE(MAX(position), -1) FROM playlist_tracks WHERE playlistId = :id")
+    abstract suspend fun lastPosition(id: Long): Int
+
+    /** Replaces the playlist's contents with [trackIds] in this order. */
+    @Transaction
+    open suspend fun setPlaylistOrder(id: Long, trackIds: List<Long>) {
+        clearPlaylistTracks(id)
+        insertPlaylistTracks(trackIds.mapIndexed { i, t -> PlaylistTrack(id, i, t) })
+    }
+
+    @Transaction
+    open suspend fun appendToPlaylist(id: Long, trackIds: List<Long>) {
+        val start = lastPosition(id) + 1
+        insertPlaylistTracks(trackIds.mapIndexed { i, t -> PlaylistTrack(id, start + i, t) })
+    }
+
+    @Transaction
+    open suspend fun createPlaylist(name: String, trackIds: List<Long>): Long {
+        val id = insertPlaylist(PlaylistEntity(name = name, createdAt = System.currentTimeMillis()))
+        insertPlaylistTracks(trackIds.mapIndexed { i, t -> PlaylistTrack(id, i, t) })
+        return id
+    }
+
+    // ---- lyrics (v1.1) ----
+    @Query("SELECT * FROM lyrics WHERE uri = :uri")
+    abstract fun lyrics(uri: String): Flow<LyricsEntity?>
+
+    @Query("SELECT * FROM lyrics WHERE uri = :uri")
+    abstract suspend fun lyricsNow(uri: String): LyricsEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun putLyrics(l: LyricsEntity)
+
+    @Query("UPDATE lyrics SET uri = :newUri WHERE uri = :oldUri")
+    abstract suspend fun moveLyrics(oldUri: String, newUri: String)
 }
 
 @Database(
-    entities = [TrackEntity::class, TrackFts::class, UserAlbumEntity::class, UserAlbumTrack::class, SourceEntity::class, HotCue::class],
-    version = 2,
+    entities = [
+        TrackEntity::class, TrackFts::class, UserAlbumEntity::class, UserAlbumTrack::class, SourceEntity::class, HotCue::class,
+        PlaylistEntity::class, PlaylistTrack::class, LyricsEntity::class,
+    ],
+    version = 3,
     exportSchema = true,
 )
 abstract class LibraryDb : RoomDatabase() {
@@ -176,6 +248,21 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+/** v3 (v1.1): custom playlists and lyrics. */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS playlists (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, createdAt INTEGER NOT NULL)")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS playlist_tracks (playlistId INTEGER NOT NULL, position INTEGER NOT NULL, trackId INTEGER NOT NULL, " +
+                "PRIMARY KEY(playlistId, position), " +
+                "FOREIGN KEY(playlistId) REFERENCES playlists(id) ON UPDATE NO ACTION ON DELETE CASCADE, " +
+                "FOREIGN KEY(trackId) REFERENCES tracks(id) ON UPDATE NO ACTION ON DELETE CASCADE)",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_playlist_tracks_trackId ON playlist_tracks (trackId)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS lyrics (uri TEXT NOT NULL, synced TEXT, plain TEXT, source TEXT NOT NULL, fetchedAt INTEGER NOT NULL, PRIMARY KEY(uri))")
+    }
+}
+
 /** App-wide access to the library database. */
 object Library {
     @Volatile private var db: LibraryDb? = null
@@ -183,7 +270,7 @@ object Library {
     fun init(context: Context) {
         if (db == null) {
             db = Room.databaseBuilder(context.applicationContext, LibraryDb::class.java, "library.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
         }
     }

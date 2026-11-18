@@ -92,6 +92,13 @@ class Scanner(private val context: Context, private val dao: LibraryDao) {
         results.fold(ScanResult(removed = gone.size)) { a, b -> a + b }
     }
 
+    /** Adds (or refreshes) one file right away, e.g. a finished download or an upgraded track. */
+    suspend fun addOne(uri: Uri, name: String, size: Long, source: String = SourceEntity.MEDIASTORE_KEY, root: String? = null): TrackEntity? =
+        withContext(Dispatchers.IO) {
+            process(Candidate(uri, name, size, source, root))
+            dao.byUri(uri.toString())
+        }
+
     private suspend fun process(c: Candidate): ScanResult {
         val uriStr = c.uri.toString()
         val existing = dao.byUri(uriStr)

@@ -89,6 +89,15 @@ for inp, out in [("in_v23.mp3", "out_v23.mp3"), ("in_v24.mp3", "out_v24.mp3"), (
         check(any(k.startswith("TXXX") for k in t.keys()), "custom frame kept")
     same_audio(inp, out)
 
+print("lyrics")
+LRC = "[00:01.00] Ñandú en la noche\n[00:02.50] second line"
+f = FLAC(os.path.join(OUT, "lyrics_kept.flac"))
+check(f.get("lyrics") == [LRC], "FLAC lyrics kept after a later edit")
+t = ID3(os.path.join(OUT, "lyrics_kept.mp3"))
+uslt = t.getall("USLT")
+check(len(uslt) == 1 and uslt[0].text == LRC and uslt[0].lang == "eng", "MP3 USLT lyrics kept after a later edit")
+same_audio("in_v24.mp3", "lyrics_kept.mp3")
+
 print()
 if failures:
     print(f"{len(failures)} check(s) failed")

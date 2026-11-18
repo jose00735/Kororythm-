@@ -102,6 +102,35 @@ data class SourceEntity(
 )
 data class HotCue(val trackId: Long, val slot: Int, val positionMs: Long)
 
+/** A custom playlist (v1.1). */
+@Entity(tableName = "playlists")
+data class PlaylistEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val createdAt: Long,
+)
+
+@Entity(
+    tableName = "playlist_tracks",
+    primaryKeys = ["playlistId", "position"],
+    foreignKeys = [
+        ForeignKey(PlaylistEntity::class, ["id"], ["playlistId"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(TrackEntity::class, ["id"], ["trackId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("trackId")],
+)
+data class PlaylistTrack(val playlistId: Long, val position: Int, val trackId: Long)
+
+/** Downloaded lyrics, keyed by the file's URI. [synced] is LRC text with timestamps. */
+@Entity(tableName = "lyrics")
+data class LyricsEntity(
+    @PrimaryKey val uri: String,
+    val synced: String?,
+    val plain: String?,
+    val source: String,
+    val fetchedAt: Long,
+)
+
 // ---- query results ----
 
 data class AlbumSummary(
@@ -125,4 +154,12 @@ data class UserAlbumSummary(
     val artPath: String?,
     val trackCount: Int,
     val durationMs: Long,
+)
+
+data class PlaylistSummary(
+    val id: Long,
+    val name: String,
+    val trackCount: Int,
+    val durationMs: Long,
+    val artPath: String?,
 )
