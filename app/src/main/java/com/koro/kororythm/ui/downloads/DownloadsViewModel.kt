@@ -33,6 +33,9 @@ data class DlJob(
     val savedAs: String? = null,
     /** When yt-dlp last printed something (to spot a stuck download). */
     val lastActivity: Long = 0,
+    /** Songs already in the library that look like the same song (offer to replace them). */
+    val similar: List<com.koro.kororythm.library.TrackEntity> = emptyList(),
+    val savedUri: String? = null,
 )
 
 data class DlUi(
@@ -58,17 +61,34 @@ data class DlUi(
     /** The link is a playlist: pick what to download. */
     val playlist: com.koro.kororythm.downloads.Probe.Playlist? = null,
     val selected: Set<Int> = emptySet(),
+    /** Before downloading: songs in the library that look like this one. */
+    val existing: List<com.koro.kororythm.library.TrackEntity> = emptyList(),
 )
 
 class DownloadsViewModel(app: Application) : AndroidViewModel(app) {
     private val _ui = MutableStateFlow(DlUi())
     val ui: StateFlow<DlUi> = _ui.asStateFlow()
     private val wm = WorkManager.getInstance(app)
+    // (declared before init: the collector below may run immediately)
+    private val similar = java.util.concurrent.ConcurrentHashMap<UUID, List<com.koro.kororythm.library.TrackEntity>>()
+    private val dismissed = mutableSetOf<UUID>()
+    private var lastInfos: List<WorkInfo> = emptyList()
 
     init {
         viewModelScope.launch {
             wm.getWorkInfosByTagFlow(DownloadWorker.TAG).collect { infos ->
-                _ui.update { it.copy(jobs = infos.map(::toJob).sortedBy { j -> if (j.state == JobState.RUNNING || j.state == JobState.QUEUED) 0 else 1 }) }
+                lastInfos = infos
+                // Finished downloads: look for the same song already in the library (once per job).
+                infos.filter { it.state == WorkInfo.State.SUCCEEDED && !similar.containsKey(it.id) }.forEach { w ->
+                    similar[w.id] = emptyList()
+                    val id = w.outputData.getLong(DownloadWorker.K_TRACK_ID, -1)
+                    viewModelScope.launch {
+                        val mine = Library.dao.byIds(listOf(id)).firstOrNull() ?: return@launch
+                        similar[w.id] = com.koro.kororythm.library.SongMatch.find(Library.dao.tracksNow(), mine.title, mine.artist, exceptId = id).take(3)
+                        refreshJobs()
+                    }
+                }
+                refreshJobs()
             }
         }
     }
@@ -80,6 +100,7 @@ class DownloadsViewModel(app: Application) : AndroidViewModel(app) {
                 w.id, title, "", JobState.DONE, "Saved", 1f,
                 trackId = w.outputData.getLong(DownloadWorker.K_TRACK_ID, -1),
                 savedAs = w.outputData.getString(DownloadWorker.K_SAVED_AS),
+                similar = if (w.id in dismissed) emptyList() else similar[w.id].orEmpty(),
             )
             WorkInfo.State.FAILED, WorkInfo.State.CANCELLED -> DlJob(
                 w.id, title, "", JobState.FAILED, "Failed", 0f,
@@ -92,6 +113,22 @@ class DownloadsViewModel(app: Application) : AndroidViewModel(app) {
                 lastActivity = w.progress.getLong(DownloadWorker.K_TIME, 0L),
             )
             else -> DlJob(w.id, title, "", JobState.QUEUED, "Waiting", 0f)
+        }
+    }
+
+
+    private fun refreshJobs() = _ui.update { it.copy(jobs = lastInfos.map(::toJob).sortedBy { j -> if (j.state == JobState.RUNNING || j.state == JobState.QUEUED) 0 else 1 }) }
+
+    /** "Keep both": stop offering to replace. */
+    fun keepBoth(id: UUID) { dismissed += id; refreshJobs() }
+
+    /** "Replace it": hand over to Upgrade quality (compares, swaps the file in, cleans up the copy). */
+    fun replace(job: DlJob, old: com.koro.kororythm.library.TrackEntity, upgrade: com.koro.kororythm.ui.upgrade.UpgradeViewModel) {
+        viewModelScope.launch {
+            val dl = Library.dao.byIds(listOf(job.trackId)).firstOrNull() ?: return@launch
+            dismissed += job.id
+            refreshJobs()
+            upgrade.startWith(old, dl.uri)
         }
     }
 
@@ -133,9 +170,12 @@ class DownloadsViewModel(app: Application) : AndroidViewModel(app) {
                 if (fetchId != pid) return@onSuccess
                 val version = YtEngine.version(getApplication())
                 when (probe) {
-                    is com.koro.kororythm.downloads.Probe.Single -> _ui.update {
+                    is com.koro.kororythm.downloads.Probe.Single -> {
                         val info = probe.info
-                        it.copy(fetching = false, info = info, title = info.title, artist = info.artist.orEmpty(), album = "", engineVersion = version)
+                        val have = com.koro.kororythm.library.SongMatch.find(Library.dao.tracksNow(), info.title, info.artist).take(3)
+                        _ui.update {
+                            it.copy(fetching = false, info = info, title = info.title, artist = info.artist.orEmpty(), album = "", engineVersion = version, existing = have)
+                        }
                     }
                     is com.koro.kororythm.downloads.Probe.Playlist -> _ui.update {
                         // A "watch?v=…&list=…" link preselects that video; a bare playlist link selects everything.

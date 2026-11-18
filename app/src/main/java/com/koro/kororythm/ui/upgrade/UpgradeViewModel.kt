@@ -42,12 +42,24 @@ class UpgradeViewModel(app: Application) : AndroidViewModel(app) {
     private class Pending(val old: TrackEntity, val placed: Placed, val oldSpec: Quality.Spec, val newSpec: Quality.Spec, val retry: Boolean)
     private var pending: Pending? = null
 
-    fun start(track: TrackEntity) { _state.value = UpgradeState.Pick(track) }
-    fun dismiss() { _state.value = UpgradeState.Idle; pending = null }
+    fun start(track: TrackEntity) { cleanup = null; _state.value = UpgradeState.Pick(track) }
+    fun dismiss() { _state.value = UpgradeState.Idle; pending = null; cleanup = null }
+
+    /** A download that replaces [track]: once swapped in, its own separate copy ([downloadUri]) is removed. */
+    private var cleanup: String? = null
+
+    fun startWith(track: TrackEntity, downloadUri: String) {
+        cleanup = downloadUri
+        check(track, Uri.parse(downloadUri))
+    }
 
     fun picked(uri: Uri?) {
         val track = (_state.value as? UpgradeState.Pick)?.track ?: return
         if (uri == null) { dismiss(); return }
+        check(track, uri)
+    }
+
+    private fun check(track: TrackEntity, uri: Uri) {
         _state.value = UpgradeState.Checking(track)
         viewModelScope.launch {
             runCatching {
@@ -121,6 +133,14 @@ class UpgradeViewModel(app: Application) : AndroidViewModel(app) {
         Library.dao.moveLyrics(p.old.uri, row.uri)
         player.fileRewritten(p.old.uri, row.toTrackInfo())
         com.koro.kororythm.dj.AnalysisWorker.runNow(app)
+        // Replaced from a download: its separate copy in Music/Kororythm isn't needed any more.
+        cleanup?.let { dl ->
+            runCatching { app.contentResolver.delete(Uri.parse(dl), null, null) }
+            Library.dao.deleteUris(listOf(dl))
+            Library.dao.deleteLyrics(listOf(dl))
+            player.fileRemoved(dl)
+        }
+        cleanup = null
         val factor = if (p.oldSpec.effectiveKbps > 0) p.newSpec.effectiveKbps / p.oldSpec.effectiveKbps else 1.0
         pending = null
         this.player = null

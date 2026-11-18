@@ -35,4 +35,7 @@ interface PlayerActions {
 
     /** The file was rewritten (and maybe renamed): refresh it in the queue and resume. */
     fun fileRewritten(oldUri: String, info: TrackInfo) {}
+
+    /** The file is gone (deleted or missing): take it out of the queue. */
+    fun fileRemoved(uri: String) {}
 }

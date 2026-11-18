@@ -136,7 +136,7 @@ class MainActivity : ComponentActivity() {
                             progress = if (fixQueue.isEmpty()) null else "${fixPos + 1}/${fixQueue.size}",
                         )
                         Screen.DJ -> DjScreen(djVm, vm, onClose = { screen = Screen.PLAYER })
-                        Screen.DOWNLOADS -> DownloadsScreen(downloadsVm, vm, onClose = { screen = downloadsReturn })
+                        Screen.DOWNLOADS -> DownloadsScreen(downloadsVm, vm, onClose = { screen = downloadsReturn }, upgrade = upgradeVm)
                         Screen.ALBUM -> AlbumWizardScreen(
                             albumVm,
                             onClose = { screen = Screen.LIBRARY },

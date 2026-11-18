@@ -87,6 +87,14 @@ open class LibraryCallbacks {
     open fun recheckGenres() {}
     /** Opens the tag editor on each of these songs in turn. */
     open fun fixAll(tracks: List<TrackEntity>) {}
+    open fun refresh() {}
+    open fun toggleDecade(d: Int) {}
+    open fun clearDecades() {}
+    open fun askDelete(t: TrackEntity) {}
+    open fun confirmDelete() {}
+    open fun cancelDelete() {}
+    open fun removeMissing() {}
+    open fun dismissMissing() {}
 }
 
 @Composable
@@ -143,6 +151,20 @@ fun LibraryScreen(
         override fun findGenres() = vm.findGenres()
         override fun recheckGenres() { vm.recheckGenres() }
         override fun fixAll(tracks: List<TrackEntity>) = onFixAll(tracks.map { it.uri })
+        override fun refresh() = vm.refresh(player)
+        override fun toggleDecade(d: Int) = vm.toggleDecade(d)
+        override fun clearDecades() = vm.clearDecades()
+        override fun askDelete(t: TrackEntity) = vm.askDelete(t)
+        override fun confirmDelete() = vm.deleteFile(player)
+        override fun cancelDelete() = vm.cancelDelete()
+        override fun removeMissing() { vm.removeMissing() }
+        override fun dismissMissing() = vm.dismissMissing()
+    }
+    val deleteConsent = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult(),
+    ) { r -> vm.deleteResult(r.resultCode == android.app.Activity.RESULT_OK) }
+    androidx.compose.runtime.LaunchedEffect(ui.deleteConsent) {
+        ui.deleteConsent?.let { deleteConsent.launch(androidx.activity.result.IntentSenderRequest.Builder(it).build()) }
     }
     val context = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.runtime.LaunchedEffect(ui.toast) {
@@ -158,6 +180,8 @@ fun LibraryContent(ui: LibraryUi, cb: LibraryCallbacks, nowPlayingUri: String? =
         ui.menu?.let { TrackMenu(it, cb) }
         ui.addTo?.let { ChoosePlaylist(ui.playlists, it, cb) }
         ui.prompt?.let { NameDialog(it, cb) }
+        ui.confirmDelete?.let { DeleteDialog(it, cb) }
+        ui.missing?.let { MissingDialog(it, cb) }
     }
 }
 
@@ -168,7 +192,8 @@ private fun LibraryPage(ui: LibraryUi, cb: LibraryCallbacks, nowPlayingUri: Stri
         onBack = { if (ui.detail != null) cb.closeDetail() else cb.back() },
         backLabel = if (ui.detail != null) "◂ BACK" else "◂ PLAYER",
         actions = {
-            NeonButton("⇩ GET", cb::downloads, accent = Neon.Orange)
+            NeonButton(if (ui.checking != null) "…" else "↻", cb::refresh, active = ui.checking != null)
+            NeonButton("⇩", cb::downloads, accent = Neon.Orange)
             NeonButton("IMPORT", cb::import, accent = Neon.Orange)
             NeonButton("+ ALBUM", cb::newAlbum)
         },
@@ -188,6 +213,12 @@ private fun LibraryPage(ui: LibraryUi, cb: LibraryCallbacks, nowPlayingUri: Stri
             LibTab.entries.map { if (it == LibTab.NEEDS) "⚑ NEEDS TAGS · ${ui.needs.size}" else it.label },
             ui.tab.ordinal, { cb.tab(LibTab.entries[it]) },
         )
+        ui.checking?.let { (n, total) ->
+            NeonText("Checking that every file is still there… $n / $total", Modifier.padding(top = 6.dp), size = 10.sp, color = Neon.Cyan, glow = null)
+        }
+        if (ui.tab in setOf(LibTab.TRACKS, LibTab.ALBUMS, LibTab.ARTISTS, LibTab.GENRES) && ui.decadeCounts.size > 1) {
+            DecadeRow(ui, cb)
+        }
         if (ui.needs.isNotEmpty() && ui.tab != LibTab.NEEDS) {
             Row(
                 Modifier.fillMaxWidth().padding(top = 6.dp)
@@ -287,7 +318,7 @@ private fun TrackRow(
         }
         Column(Modifier.weight(1f)) {
             NeonText(t.title, size = 13.sp, color = if (playing) Neon.Orange else Neon.Ink, glow = if (playing) Neon.Orange else null)
-            NeonText(listOfNotNull(t.artist, t.album).joinToString(" · ").ifBlank { "Unknown artist" }, size = 10.sp, color = Neon.Dim, glow = null)
+            NeonText(listOfNotNull(t.artist, t.album, t.year?.toString()).joinToString(" · ").ifBlank { "Unknown artist" }, size = 10.sp, color = Neon.Dim, glow = null)
         }
         if (t.tagsMissing) NeonText("●", Modifier.padding(horizontal = 4.dp), size = 9.sp, color = Neon.Orange, glow = null)
         NeonText(listOfNotNull(t.codec, t.bits?.let { "$it" }).joinToString(" "), Modifier.padding(horizontal = 6.dp), size = 9.sp, color = Neon.Dim, glow = null)

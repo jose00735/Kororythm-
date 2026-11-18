@@ -82,10 +82,12 @@ open class DlCallbacks {
     open fun closePlaylist() {}
     open fun downloadSelected() {}
     open fun cancelAll() {}
+    open fun replace(job: DlJob, old: com.koro.kororythm.library.TrackEntity) {}
+    open fun keepBoth(id: UUID) {}
 }
 
 @Composable
-fun DownloadsScreen(vm: DownloadsViewModel, player: PlayerViewModel, onClose: () -> Unit) {
+fun DownloadsScreen(vm: DownloadsViewModel, player: PlayerViewModel, onClose: () -> Unit, upgrade: com.koro.kororythm.ui.upgrade.UpgradeViewModel? = null) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val context = LocalContext.current
     LaunchedEffect(Unit) { vm.loadVersion() }
@@ -123,6 +125,8 @@ fun DownloadsScreen(vm: DownloadsViewModel, player: PlayerViewModel, onClose: ()
             vm.downloadSelected()
         }
         override fun cancelAll() = vm.cancelAll()
+        override fun replace(job: DlJob, old: com.koro.kororythm.library.TrackEntity) { upgrade?.let { vm.replace(job, old, it) } }
+        override fun keepBoth(id: UUID) = vm.keepBoth(id)
         override fun copy(text: String) {
             val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             cm.setPrimaryClip(android.content.ClipData.newPlainText("Kororythm download log", text))
@@ -181,6 +185,13 @@ fun DownloadsContent(ui: DlUi, cb: DlCallbacks, frozenNow: Long? = null) {
                                 size = 10.sp, color = Neon.Dim, glow = null,
                             )
                         }
+                    }
+                    if (ui.existing.isNotEmpty()) {
+                        val e = ui.existing.first()
+                        NeonText(
+                            "≈ Already in your library: ${e.title}${e.artist?.let { " – $it" } ?: ""} (${listOfNotNull(e.codec, e.bitrateKbps?.let { "$it kbps" }).joinToString(" ")}). After downloading you can replace it.",
+                            Modifier.padding(top = 8.dp), size = 10.sp, color = Neon.Orange, glow = null, maxLines = 3,
+                        )
                     }
                     Spacer(Modifier.height(8.dp))
                     NeonTextField(ui.title, cb::title, label = "TITLE")
@@ -267,6 +278,7 @@ private fun JobRow(j: DlJob, cb: DlCallbacks, logOpen: Boolean = false, now: Lon
             Spacer(Modifier.height(5.dp))
             if (j.progress <= 0f || j.progress >= 1f) Scanline() else ProgressBar(j.progress)
         }
+        if (j.state == JobState.DONE && j.similar.isNotEmpty()) SimilarBox(j, cb)
         if (showLog) LogView(j, cb)
     }
 }
@@ -433,3 +445,33 @@ private fun PlaylistPicker(pl: com.koro.kororythm.downloads.Probe.Playlist, ui: 
         }
     }
 }
+
+/** "You already have this song": replace the old one with the download, or keep both. */
+@Composable
+private fun SimilarBox(j: DlJob, cb: DlCallbacks) {
+    Column(
+        Modifier.fillMaxWidth().padding(top = 6.dp)
+            .background(Neon.Orange.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
+            .neonBorder(Neon.Orange, 6.dp, 0.4f)
+            .padding(8.dp),
+    ) {
+        NeonText("≈ Looks like a song you already have:", size = 10.sp, color = Neon.Orange, glow = null)
+        j.similar.forEach { t ->
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    NeonText(t.title, size = 12.sp, weight = FontWeight.Bold)
+                    NeonText(
+                        listOfNotNull(t.artist, t.codec, t.bitrateKbps?.let { "$it kbps" }, t.bits?.let { "$it-bit" }).joinToString(" · "),
+                        size = 9.sp, color = Neon.Dim, glow = null,
+                    )
+                }
+                NeonButton("⇄ REPLACE IT", { cb.replace(j, t) }, accent = Neon.Orange)
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            NeonText("Replacing keeps its playlists, hot cues and folder.", Modifier.weight(1f), size = 9.sp, color = Neon.Dim, glow = null, maxLines = 2)
+            NeonButton("KEEP BOTH", { cb.keepBoth(j.id) })
+        }
+    }
+}
+

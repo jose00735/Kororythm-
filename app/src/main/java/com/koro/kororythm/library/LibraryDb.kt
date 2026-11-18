@@ -30,6 +30,12 @@ abstract class LibraryDao {
     @Query("SELECT COUNT(*) FROM tracks")
     abstract fun count(): Flow<Int>
 
+    @Query("SELECT * FROM tracks")
+    abstract suspend fun tracksNow(): List<TrackEntity>
+
+    @Query("SELECT * FROM tracks ORDER BY title COLLATE NOCASE")
+    abstract fun allTracks(): Flow<List<TrackEntity>>
+
     @Query("SELECT * FROM tracks WHERE uri = :uri")
     abstract suspend fun byUri(uri: String): TrackEntity?
 
@@ -247,6 +253,9 @@ abstract class LibraryDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun putLyrics(l: LyricsEntity)
+
+    @Query("DELETE FROM lyrics WHERE uri IN (:uris)")
+    abstract suspend fun deleteLyrics(uris: List<String>)
 
     @Query("UPDATE lyrics SET uri = :newUri WHERE uri = :oldUri")
     abstract suspend fun moveLyrics(oldUri: String, newUri: String)

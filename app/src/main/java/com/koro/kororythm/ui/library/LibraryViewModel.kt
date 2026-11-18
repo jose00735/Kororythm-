@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.koro.kororythm.library.AlbumSummary
 import com.koro.kororythm.library.ArtistSummary
 import com.koro.kororythm.library.Library
+import kotlinx.coroutines.flow.map
+import com.koro.kororythm.library.Decades
 import com.koro.kororythm.library.PlaylistSummary
 import com.koro.kororythm.library.TagRules
 import com.koro.kororythm.library.TrackEntity
@@ -64,6 +66,18 @@ data class LibraryUi(
     val needs: List<TrackEntity> = emptyList(),
     val genres: List<GenreGroup> = emptyList(),
     val genreScan: GenreScan = GenreScan(),
+    /** Decades picked in the filter row (empty = all years). */
+    val decades: Set<Int> = emptySet(),
+    /** Decades in the library with their song counts, oldest first ("No year" last). */
+    val decadeCounts: List<Pair<Int, Int>> = emptyList(),
+    /** Asking "Delete this file?". */
+    val confirmDelete: TrackEntity? = null,
+    /** Android's "Allow deleting?" dialog for that file. */
+    val deleteConsent: android.content.IntentSender? = null,
+    /** Manual refresh running: songs checked so far / total. */
+    val checking: Pair<Int, Int>? = null,
+    /** Pop-up after a refresh: songs whose files are gone (empty list = all fine). */
+    val missing: List<com.koro.kororythm.library.LibraryCheck.Missing>? = null,
 )
 
 class LibraryViewModel(app: Application) : AndroidViewModel(app) {
@@ -79,15 +93,31 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     private fun matches(q: String, vararg fields: String?) =
         q.isBlank() || fields.any { it?.contains(q.trim(), ignoreCase = true) == true }
 
-    private val albums = combine(dao.albums(), query) { list, q -> list.filter { matches(q, it.album, it.artist) } }
-    private val artists = combine(dao.artists(), query) { list, q -> list.filter { matches(q, it.artist) } }
+    // ---- decade filter: applies to tracks, albums, artists, genres and any open list ----
+    private val decades = MutableStateFlow<Set<Int>>(emptySet())
+    private val all = dao.allTracks()
+    private val inDecades = combine(all, decades) { l, d -> if (d.isEmpty()) l else l.filter { Decades.matches(d, it.year) } }
+    private val decadeCounts = all.map { l ->
+        l.groupingBy { Decades.of(it.year) }.eachCount().toList()
+            .sortedWith(compareBy<Pair<Int, Int>> { it.first == Decades.UNKNOWN }.thenBy { it.first })
+    }
+    private val shownTracks = combine(tracks, decades) { l, d -> if (d.isEmpty()) l else l.filter { Decades.matches(d, it.year) } }
+
+    private val albums = combine(dao.albums(), query, inDecades, decades) { list, q, inD, d ->
+        val keep = if (d.isEmpty()) null else inD.map { (it.album ?: "Unknown album") to (it.albumArtist ?: it.artist) }.toHashSet()
+        list.filter { matches(q, it.album, it.artist) && (keep == null || (it.album to it.artist) in keep) }
+    }
+    private val artists = combine(dao.artists(), query, inDecades, decades) { list, q, inD, d ->
+        val keep = if (d.isEmpty()) null else inD.map { it.artist ?: "Unknown artist" }.toHashSet()
+        list.filter { matches(q, it.artist) && (keep == null || it.artist in keep) }
+    }
     private val mine = combine(dao.userAlbums(), query) { list, q -> list.filter { matches(q, it.title, it.artist) } }
     private val lists = combine(dao.playlists(), query) { list, q -> list.filter { matches(q, it.name) } }
     private val overlay = MutableStateFlow(LibraryUi())
 
-    private val genreGroups = combine(dao.genreCounts(), query) { rows, q ->
+    private val genreGroups = combine(inDecades, query) { rows, q ->
         rows.groupBy { it.genreMain }.map { (main, l) ->
-            GenreGroup(main, l.sumOf { it.count }, l.map { it.subGenre to it.count }.sortedByDescending { it.second })
+            GenreGroup(main, l.size, l.groupingBy { it.subGenre }.eachCount().toList().sortedByDescending { it.second })
         }.filter { g -> matches(q, g.main) || g.subs.any { matches(q, it.first) } }
             .sortedWith(compareBy<GenreGroup> { it.main == null }.thenByDescending { it.count })
     }
@@ -104,19 +134,99 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
     private val extras = combine(dao.needsTags(), genreGroups, scan) { n, g, sc -> Triple(n, g, sc) }
+    private val shownDetail = combine(detail, decades) { dt, d ->
+        if (dt == null || d.isEmpty()) dt else dt.copy(tracks = dt.tracks.filter { Decades.matches(d, it.year) })
+    }
 
     val ui: StateFlow<LibraryUi> = combine(
-        combine(tab, query, dao.count(), detail, overlay) { t, q, c, d, o ->
+        combine(tab, query, dao.count(), shownDetail, overlay) { t, q, c, d, o ->
             o.copy(tab = t, query = q, count = c, detail = d)
         },
-        tracks, albums, artists, combine(mine, lists, extras) { a, b, c -> Triple(a, b, c) },
-    ) { base, tr, al, ar, ml ->
+        shownTracks, albums, artists,
+        combine(mine, lists, extras, decades, decadeCounts) { a, b, c, d, dc -> Extras(a, b, c, d, dc) },
+    ) { base, tr, al, ar, x ->
         base.copy(
-            tracks = tr, albums = al, artists = ar, mine = ml.first, playlists = ml.second,
-            needs = ml.third.first, genres = ml.third.second, genreScan = ml.third.third,
+            tracks = tr, albums = al, artists = ar, mine = x.mine, playlists = x.lists,
+            needs = x.extras.first, genres = x.extras.second, genreScan = x.extras.third,
+            decades = x.decades, decadeCounts = x.decadeCounts,
         )
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LibraryUi())
+
+    private data class Extras(
+        val mine: List<UserAlbumSummary>,
+        val lists: List<PlaylistSummary>,
+        val extras: Triple<List<TrackEntity>, List<GenreGroup>, GenreScan>,
+        val decades: Set<Int>,
+        val decadeCounts: List<Pair<Int, Int>>,
+    )
+
+    fun toggleDecade(d: Int) { decades.value = if (d in decades.value) decades.value - d else decades.value + d }
+    fun clearDecades() { decades.value = emptySet() }
+
+    // ---- delete a file ----
+    fun askDelete(t: TrackEntity) = ov { it.copy(menu = null, confirmDelete = t) }
+    fun cancelDelete() = ov { it.copy(confirmDelete = null, deleteConsent = null) }
+    private var deleting: Pair<TrackEntity, Boolean>? = null
+    private var playerRef: com.koro.kororythm.playback.PlayerActions? = null
+
+    fun deleteFile(player: com.koro.kororythm.playback.PlayerActions) {
+        val t = overlay.value.confirmDelete ?: return
+        playerRef = player
+        viewModelScope.launch {
+            player.releaseFile(t.uri)
+            when (val d = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.koro.kororythm.tags.Upgrader.deleteOld(getApplication(), android.net.Uri.parse(t.uri)) }) {
+                com.koro.kororythm.tags.DeleteStep.Done -> forget(listOf(t), "Deleted \"${t.title}\"")
+                is com.koro.kororythm.tags.DeleteStep.NeedsConsent -> { deleting = t to d.retry; ov { it.copy(deleteConsent = d.sender) } }
+                is com.koro.kororythm.tags.DeleteStep.Failed -> ov { it.copy(confirmDelete = null, toast = "Couldn't delete: ${d.reason}") }
+            }
+        }
+    }
+
+    /** Result of Android's "allow deleting" dialog. */
+    fun deleteResult(ok: Boolean) {
+        val (t, retry) = deleting ?: return
+        deleting = null
+        ov { it.copy(deleteConsent = null) }
+        if (!ok) { ov { it.copy(confirmDelete = null, toast = "Not deleted") }; return }
+        viewModelScope.launch {
+            val done = !retry || kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.koro.kororythm.tags.Upgrader.deleteOld(getApplication(), android.net.Uri.parse(t.uri))
+            } == com.koro.kororythm.tags.DeleteStep.Done
+            if (done) forget(listOf(t), "Deleted \"${t.title}\"") else ov { it.copy(confirmDelete = null, toast = "Couldn't delete the file") }
+        }
+    }
+
+    /** Drops songs from the library (their playlist entries and hot cues go with them) and from the queue. */
+    private suspend fun forget(tracks: List<TrackEntity>, toast: String) {
+        val uris = tracks.map { it.uri }
+        uris.chunked(500).forEach { dao.deleteUris(it); dao.deleteLyrics(it) }
+        uris.forEach { u -> playerRef?.fileRemoved(u) }
+        detail.value?.let { d -> detail.value = d.copy(tracks = d.tracks.filter { it.uri !in uris }) }
+        ov { it.copy(confirmDelete = null, toast = toast) }
+    }
+
+    // ---- manual refresh ----
+    fun refresh(player: com.koro.kororythm.playback.PlayerActions) {
+        if (overlay.value.checking != null) return
+        playerRef = player
+        viewModelScope.launch {
+            val list = dao.tracksNow()
+            ov { it.copy(checking = 0 to list.size) }
+            val gone = com.koro.kororythm.library.LibraryCheck.missing(getApplication(), list) { n -> ov { it.copy(checking = n to list.size) } }
+            ov { it.copy(checking = null, missing = gone) }
+            // New files in your folders are picked up too.
+            com.koro.kororythm.library.ImportWorker.runNow(getApplication())
+        }
+    }
+
+    fun removeMissing() = viewModelScope.launch {
+        val gone = overlay.value.missing.orEmpty()
+        ov { it.copy(missing = null) }
+        if (gone.isNotEmpty()) forget(gone.map { it.track }, "Removed ${gone.size} missing songs from the library")
+    }
+
+    fun dismissMissing() = ov { it.copy(missing = null) }
 
     private fun ov(f: (LibraryUi) -> LibraryUi) { overlay.value = f(overlay.value) }
 

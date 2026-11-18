@@ -17,6 +17,13 @@ An Android music player for FLAC and MP3 with a classic Winamp layout, two skins
 
 Built with Kotlin, Jetpack Compose and AndroidX Media3. Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## New in v1.3
+
+- **Delete file** (⋮ ▸ Delete file…): asks first, removes the file from the phone (Android may ask once) and the song from the library, its playlists, hot cues and the queue
+- **Replace with a download:** when a finished download looks like a song you already have (title and artist compared without "(Official Video)", "feat." credits, accents or punctuation), the queue offers **⇄ REPLACE IT** or **KEEP BOTH**. Replacing runs Upgrade quality: an honest before/after comparison, the file swapped into the old song's folder under its name and tags, playlists and hot cues kept, and the separate downloaded copy removed. The Downloads screen also warns before you download a song you already have
+- **↻ Refresh** in the library header checks that every song's file still exists (and still has permission), then shows a pop-up listing the missing ones with **REMOVE FROM LIBRARY** / **KEEP**, or "All files present ✓"; it also rescans your folders for new files
+- **Decade filter:** chips under the tabs (ALL YEARS, 1970s, 1980s, … , No year) with counts; pick several (e.g. 1990s + 2000s) and Tracks, Albums, Artists, Genres and any open album, genre or playlist show only those years; track rows now show the year
+
 ## New in v1.2
 
 **⚑ Needs tags** (Library tab, plus an orange banner when there are any)

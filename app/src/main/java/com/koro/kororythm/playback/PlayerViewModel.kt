@@ -202,6 +202,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app), PlayerActions {
         saveQueue()
     }
 
+    override fun fileRemoved(uri: String) {
+        val c = controller ?: return
+        for (i in c.mediaItemCount - 1 downTo 0) if (c.getMediaItemAt(i).mediaId == uri) c.removeMediaItem(i)
+        saveQueue()
+    }
+
     override fun removeAt(index: Int) {
         controller?.removeMediaItem(index); saveQueue()
     }
