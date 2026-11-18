@@ -78,6 +78,8 @@ data class LibraryUi(
     val checking: Pair<Int, Int>? = null,
     /** Pop-up after a refresh: songs whose files are gone (empty list = all fine). */
     val missing: List<com.koro.kororythm.library.LibraryCheck.Missing>? = null,
+    /** How many songs that refresh checked (to spot "almost everything missing"). */
+    val checkedTotal: Int = 0,
 )
 
 class LibraryViewModel(app: Application) : AndroidViewModel(app) {
@@ -214,7 +216,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
             val list = dao.tracksNow()
             ov { it.copy(checking = 0 to list.size) }
             val gone = com.koro.kororythm.library.LibraryCheck.missing(getApplication(), list) { n -> ov { it.copy(checking = n to list.size) } }
-            ov { it.copy(checking = null, missing = gone) }
+            ov { it.copy(checking = null, missing = gone, checkedTotal = list.size) }
             // New files in your folders are picked up too.
             com.koro.kororythm.library.ImportWorker.runNow(getApplication())
         }

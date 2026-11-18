@@ -181,7 +181,7 @@ fun LibraryContent(ui: LibraryUi, cb: LibraryCallbacks, nowPlayingUri: String? =
         ui.addTo?.let { ChoosePlaylist(ui.playlists, it, cb) }
         ui.prompt?.let { NameDialog(it, cb) }
         ui.confirmDelete?.let { DeleteDialog(it, cb) }
-        ui.missing?.let { MissingDialog(it, cb) }
+        ui.missing?.let { MissingDialog(it, cb, ui.checkedTotal) }
     }
 }
 

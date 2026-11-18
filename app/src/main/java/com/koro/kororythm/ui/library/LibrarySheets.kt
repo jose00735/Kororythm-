@@ -289,7 +289,7 @@ fun DeleteDialog(t: TrackEntity, cb: LibraryCallbacks) {
 
 /** Result of the manual refresh. */
 @Composable
-fun MissingDialog(missing: List<com.koro.kororythm.library.LibraryCheck.Missing>, cb: LibraryCallbacks) {
+fun MissingDialog(missing: List<com.koro.kororythm.library.LibraryCheck.Missing>, cb: LibraryCallbacks, total: Int = 0) {
     CenterDialog(cb::dismissMissing) {
         if (missing.isEmpty()) {
             NeonText("ALL FILES PRESENT ✓", size = 13.sp, weight = FontWeight.Bold, spacing = 2.sp)
@@ -298,7 +298,15 @@ fun MissingDialog(missing: List<com.koro.kororythm.library.LibraryCheck.Missing>
             return@CenterDialog
         }
         NeonText("${missing.size} SONG${if (missing.size == 1) "" else "S"} MISSING", size = 13.sp, weight = FontWeight.Bold, color = Neon.Orange, glow = null, spacing = 2.sp)
-        NeonText("Their files were moved, deleted or can't be reached any more:", Modifier.padding(vertical = 6.dp), size = 11.sp, color = Neon.Dim, glow = null, maxLines = 2)
+        val suspicious = com.koro.kororythm.library.LibraryCheck.suspicious(missing.size, total)
+        if (suspicious) {
+            NeonText(
+                "That's ${missing.size} of $total songs, which usually means Kororythm can't read your storage right now (a card or folder unmounted, or access taken away), not that the files are gone. Keeping them is safer; check Library ▸ Import.",
+                Modifier.padding(vertical = 6.dp), size = 11.sp, color = Neon.Orange, glow = null, maxLines = 6,
+            )
+        } else {
+            NeonText("Their files were moved, deleted or can't be reached any more:", Modifier.padding(vertical = 6.dp), size = 11.sp, color = Neon.Dim, glow = null, maxLines = 2)
+        }
         LazyColumn(Modifier.heightIn(max = 300.dp)) {
             items(missing, key = { it.track.id }) { m ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -311,8 +319,13 @@ fun MissingDialog(missing: List<com.koro.kororythm.library.LibraryCheck.Missing>
             }
         }
         Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            NeonButton("REMOVE FROM LIBRARY", cb::removeMissing, active = true, accent = Neon.Orange)
-            NeonButton("KEEP", cb::dismissMissing)
+            if (suspicious) {
+                NeonButton("KEEP THEM", cb::dismissMissing, active = true)
+                NeonButton("REMOVE ANYWAY", cb::removeMissing, accent = Neon.Orange)
+            } else {
+                NeonButton("REMOVE FROM LIBRARY", cb::removeMissing, active = true, accent = Neon.Orange)
+                NeonButton("KEEP", cb::dismissMissing)
+            }
         }
     }
 }

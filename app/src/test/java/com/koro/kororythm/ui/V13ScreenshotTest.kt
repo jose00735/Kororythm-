@@ -83,6 +83,10 @@ class V13ScreenshotTest {
         )
     }
 
+    @Test fun suspiciousMissing() = paparazzi.snapshot("97b_missing_suspicious") {
+        LibraryContent(base.copy(missing = tracks.map { LibraryCheck.Missing(it, "no permission any more") }, checkedTotal = 10), LibraryCallbacks())
+    }
+
     @Test fun allPresent() = paparazzi.snapshot("98_all_present") { LibraryContent(base.copy(missing = emptyList()), LibraryCallbacks()) }
 
     @Test fun replaceSimilar() = both("99_replace_similar") {
