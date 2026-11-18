@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.koro.kororythm.library.AlbumSummary
 import com.koro.kororythm.library.ArtistSummary
+import com.koro.kororythm.library.PlaylistSummary
 import com.koro.kororythm.library.TrackEntity
 import com.koro.kororythm.library.UserAlbumSummary
 import com.koro.kororythm.playback.PlayerActions
@@ -65,6 +66,21 @@ open class LibraryCallbacks {
     open fun newAlbum() {}
     open fun editTags(t: TrackEntity) {}
     open fun downloads() {}
+    open fun menu(t: TrackEntity?) {}
+    open fun upgrade(t: TrackEntity) {}
+    open fun lyrics(t: TrackEntity) {}
+    open fun chooseList(trackIds: List<Long>) {}
+    open fun cancelChoose() {}
+    open fun addTo(p: PlaylistSummary) {}
+    open fun newPlaylist(trackIds: List<Long>) {}
+    open fun openPlaylist(p: PlaylistSummary) {}
+    open fun renamePlaylist(id: Long, current: String) {}
+    open fun deletePlaylist(id: Long) {}
+    open fun move(from: Int, to: Int) {}
+    open fun removeAt(index: Int) {}
+    open fun promptDone(name: String) {}
+    open fun cancelPrompt() {}
+    open fun coverFlow() {}
 }
 
 @Composable
@@ -77,6 +93,8 @@ fun LibraryScreen(
     onNewAlbum: () -> Unit,
     onEditTags: (String) -> Unit = {},
     onDownloads: () -> Unit = {},
+    onUpgrade: (TrackEntity) -> Unit = {},
+    onLyrics: (TrackEntity) -> Unit = {},
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     BackHandler { if (ui.detail != null) vm.closeDetail() else onBack() }
@@ -98,12 +116,41 @@ fun LibraryScreen(
         override fun newAlbum() = onNewAlbum()
         override fun editTags(t: TrackEntity) = onEditTags(t.uri)
         override fun downloads() = onDownloads()
+        override fun menu(t: TrackEntity?) = vm.openMenu(t)
+        override fun upgrade(t: TrackEntity) { vm.openMenu(null); onUpgrade(t) }
+        override fun lyrics(t: TrackEntity) { vm.openMenu(null); onLyrics(t) }
+        override fun chooseList(trackIds: List<Long>) = vm.chooseList(trackIds)
+        override fun cancelChoose() = vm.cancelChoose()
+        override fun addTo(p: PlaylistSummary) { vm.addTo(p) }
+        override fun newPlaylist(trackIds: List<Long>) = vm.promptNew(trackIds)
+        override fun openPlaylist(p: PlaylistSummary) { vm.openPlaylist(p) }
+        override fun renamePlaylist(id: Long, current: String) = vm.promptRename(id, current)
+        override fun deletePlaylist(id: Long) { vm.deletePlaylist(id) }
+        override fun move(from: Int, to: Int) { vm.moveInPlaylist(from, to) }
+        override fun removeAt(index: Int) { vm.removeFromPlaylist(index) }
+        override fun promptDone(name: String) { vm.promptDone(name) }
+        override fun cancelPrompt() = vm.cancelPrompt()
+        override fun coverFlow() = vm.toggleCoverFlow()
+    }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(ui.toast) {
+        ui.toast?.let { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show(); vm.toastShown() }
     }
     LibraryContent(ui, cb, nowPlayingUri)
 }
 
 @Composable
 fun LibraryContent(ui: LibraryUi, cb: LibraryCallbacks, nowPlayingUri: String? = null) {
+    Box(Modifier.fillMaxSize()) {
+        LibraryPage(ui, cb, nowPlayingUri)
+        ui.menu?.let { TrackMenu(it, cb) }
+        ui.addTo?.let { ChoosePlaylist(ui.playlists, it, cb) }
+        ui.prompt?.let { NameDialog(it, cb) }
+    }
+}
+
+@Composable
+private fun LibraryPage(ui: LibraryUi, cb: LibraryCallbacks, nowPlayingUri: String?) {
     NeonScreen(
         title = "LIBRARY",
         onBack = { if (ui.detail != null) cb.closeDetail() else cb.back() },
@@ -132,7 +179,18 @@ fun LibraryContent(ui: LibraryUi, cb: LibraryCallbacks, nowPlayingUri: String? =
         ) {
             when (ui.tab) {
                 LibTab.TRACKS -> TrackList(ui.tracks, cb, nowPlayingUri)
-                LibTab.ALBUMS -> AlbumGrid(ui.albums.map { AlbumCard(it.album, it.artist ?: "Various artists", "${it.trackCount} tracks", it.artPath, null) }) { i -> cb.openAlbum(ui.albums[i]) }
+                LibTab.ALBUMS -> Column(Modifier.fillMaxSize()) {
+                    Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.End) {
+                        NeonButton(if (ui.coverFlow) "▦ GRID" else "◫ COVER FLOW", cb::coverFlow)
+                    }
+                    val cards = ui.albums.map { AlbumCard(it.album, it.artist ?: "Various artists", "${it.trackCount} tracks", it.artPath, null) }
+                    if (ui.coverFlow && cards.isNotEmpty()) {
+                        CoverFlow(cards, onOpen = { i -> cb.openAlbum(ui.albums[i]) }, onPlay = { i -> cb.openAlbum(ui.albums[i]) })
+                    } else {
+                        AlbumGrid(cards) { i -> cb.openAlbum(ui.albums[i]) }
+                    }
+                }
+                LibTab.PLAYLISTS -> PlaylistList(ui.playlists, cb)
                 LibTab.ARTISTS -> ArtistList(ui.artists, cb)
                 LibTab.MINE -> if (ui.mine.isEmpty()) {
                     Hint("No albums of your own yet.\nTap + ALBUM to compile one from your tracks.")
@@ -159,7 +217,7 @@ private fun EmptyLibrary(cb: LibraryCallbacks) {
 }
 
 @Composable
-private fun Hint(text: String) {
+internal fun Hint(text: String) {
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         NeonText(text, size = 12.sp, color = Neon.Dim, glow = null, maxLines = 3)
     }
@@ -170,13 +228,21 @@ private fun Hint(text: String) {
 private fun TrackList(tracks: List<TrackEntity>, cb: LibraryCallbacks, nowPlayingUri: String?) {
     if (tracks.isEmpty()) { Hint("No tracks match your search."); return }
     LazyColumn(Modifier.fillMaxSize()) {
-        itemsIndexed(tracks, key = { _, t -> t.id }) { i, t -> TrackRow(t, t.uri == nowPlayingUri, { cb.play(tracks, i) }, { cb.enqueue(listOf(t)) }, onEdit = { cb.editTags(t) }) }
+        itemsIndexed(tracks, key = { _, t -> t.id }) { i, t -> TrackRow(t, t.uri == nowPlayingUri, { cb.play(tracks, i) }, { cb.enqueue(listOf(t)) }, cb = cb) }
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TrackRow(t: TrackEntity, playing: Boolean, onTap: () -> Unit, onLong: () -> Unit, number: Int? = null, onEdit: (() -> Unit)? = null) {
+private fun TrackRow(
+    t: TrackEntity,
+    playing: Boolean,
+    onTap: () -> Unit,
+    onLong: () -> Unit,
+    number: Int? = null,
+    cb: LibraryCallbacks? = null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -198,8 +264,10 @@ private fun TrackRow(t: TrackEntity, playing: Boolean, onTap: () -> Unit, onLong
         if (t.tagsMissing) NeonText("●", Modifier.padding(horizontal = 4.dp), size = 9.sp, color = Neon.Orange, glow = null)
         NeonText(listOfNotNull(t.codec, t.bits?.let { "$it" }).joinToString(" "), Modifier.padding(horizontal = 6.dp), size = 9.sp, color = Neon.Dim, glow = null)
         NeonText(formatTime(t.durationMs), size = 11.sp, color = if (playing) Neon.Orange else Neon.Ink, glow = null)
-        if (onEdit != null) {
-            NeonText("✎", Modifier.clickable(onClick = onEdit).padding(start = 10.dp, end = 2.dp), size = 15.sp, color = Neon.Cyan, glow = null)
+        if (cb != null && isLossy(t)) ShinyUpgrade { cb.upgrade(t) }
+        trailing?.invoke()
+        if (cb != null) {
+            NeonText("⋮", Modifier.clickable { cb.menu(t) }.padding(start = 8.dp, end = 2.dp), size = 18.sp, color = Neon.Cyan, glow = null)
         }
     }
 }
@@ -248,6 +316,7 @@ private fun ArtistList(artists: List<ArtistSummary>, cb: LibraryCallbacks) {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun DetailView(d: LibDetail, cb: LibraryCallbacks, nowPlayingUri: String?) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -257,18 +326,34 @@ private fun DetailView(d: LibDetail, cb: LibraryCallbacks, nowPlayingUri: String
             NeonText(d.title, size = 17.sp, weight = FontWeight.Bold, maxLines = 2)
             NeonText(d.subtitle, Modifier.padding(top = 2.dp), size = 11.sp, color = Neon.Cyan, glow = null)
             NeonText("${d.tracks.size} tracks · ${formatTime(d.tracks.sumOf { it.durationMs })}", size = 10.sp, color = Neon.Dim, glow = null)
-            Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            androidx.compose.foundation.layout.FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 NeonButton("▶ PLAY ALL", { cb.play(d.tracks, 0) }, active = true, accent = Neon.Orange)
                 NeonButton("+ ADD", { cb.enqueue(d.tracks) })
                 d.userAlbumId?.let { id -> NeonButton("DELETE", { cb.deleteUserAlbum(id) }) }
+                d.playlistId?.let { id ->
+                    NeonButton("RENAME", { cb.renamePlaylist(id, d.title) })
+                    NeonButton("DELETE", { cb.deletePlaylist(id) })
+                }
             }
         }
     }
     Spacer(Modifier.height(10.dp))
     Box(Modifier.fillMaxSize().background(Neon.Panel, RoundedCornerShape(10.dp)).neonBorder(Neon.Cyan, 10.dp, 0.7f).padding(6.dp)) {
+        if (d.tracks.isEmpty() && d.playlistId != null) Hint("This playlist is empty.\nIn TRACKS, tap ⋮ on a song ▸ ADD TO PLAYLIST.")
         LazyColumn(Modifier.fillMaxSize()) {
             itemsIndexed(d.tracks, key = { i, t -> "$i:${t.id}" }) { i, t ->
-                TrackRow(t, t.uri == nowPlayingUri, { cb.play(d.tracks, i) }, { cb.enqueue(listOf(t)) }, number = i + 1, onEdit = { cb.editTags(t) })
+                TrackRow(
+                    t, t.uri == nowPlayingUri, { cb.play(d.tracks, i) }, { cb.enqueue(listOf(t)) }, number = i + 1, cb = cb,
+                    trailing = if (d.playlistId == null) null else {
+                        {
+                            Row {
+                                NeonText("▲", Modifier.clickable { cb.move(i, i - 1) }.padding(horizontal = 5.dp), size = 12.sp, color = if (i > 0) Neon.Cyan else Neon.Dim, glow = null)
+                                NeonText("▼", Modifier.clickable { cb.move(i, i + 1) }.padding(horizontal = 5.dp), size = 12.sp, color = if (i < d.tracks.lastIndex) Neon.Cyan else Neon.Dim, glow = null)
+                                NeonText("✕", Modifier.clickable { cb.removeAt(i) }.padding(horizontal = 5.dp), size = 12.sp, color = Neon.Orange, glow = null)
+                            }
+                        }
+                    },
+                )
             }
         }
     }

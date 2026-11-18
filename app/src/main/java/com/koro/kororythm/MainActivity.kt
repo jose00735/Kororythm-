@@ -14,6 +14,15 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import com.koro.kororythm.playback.TrackInfo
+import com.koro.kororythm.ui.lyrics.LyricsScreen
+import com.koro.kororythm.ui.lyrics.LyricsViewModel
+import com.koro.kororythm.ui.upgrade.UpgradeHost
+import com.koro.kororythm.ui.upgrade.UpgradeViewModel
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -34,7 +43,7 @@ import com.koro.kororythm.ui.wizards.AlbumWizardViewModel
 import com.koro.kororythm.ui.wizards.ImportViewModel
 import com.koro.kororythm.ui.wizards.ImportWizardScreen
 
-enum class Screen { PLAYER, LIBRARY, IMPORT, ALBUM, TAGS, DJ, DOWNLOADS }
+enum class Screen { PLAYER, LIBRARY, IMPORT, ALBUM, TAGS, DJ, DOWNLOADS, LYRICS }
 
 class MainActivity : ComponentActivity() {
 
@@ -45,6 +54,8 @@ class MainActivity : ComponentActivity() {
     private val tagVm: TagEditViewModel by viewModels()
     private val djVm: DjViewModel by viewModels()
     private val downloadsVm: DownloadsViewModel by viewModels()
+    private val lyricsVm: LyricsViewModel by viewModels()
+    private val upgradeVm: UpgradeViewModel by viewModels()
 
     /** A link shared from YouTube etc., waiting for the UI to open Downloads. */
     private var pendingShare by mutableStateOf<String?>(null)
@@ -69,44 +80,60 @@ class MainActivity : ComponentActivity() {
             var downloadsReturn by rememberSaveable { mutableStateOf(Screen.PLAYER) }
             BackHandler(enabled = screen == Screen.DOWNLOADS) { screen = downloadsReturn }
             val openDownloads: () -> Unit = { downloadsReturn = screen; screen = Screen.DOWNLOADS }
+            var lyricsReturn by rememberSaveable { mutableStateOf(Screen.PLAYER) }
+            var lyricsTrack by remember { mutableStateOf<TrackInfo?>(null) }
+            BackHandler(enabled = screen == Screen.LYRICS) { screen = lyricsReturn }
+            val openLyrics: (TrackInfo?) -> Unit = { t -> lyricsTrack = t; lyricsReturn = screen; screen = Screen.LYRICS }
             LaunchedEffect(pendingShare) {
                 pendingShare?.let { downloadsVm.shared(it); if (screen != Screen.DOWNLOADS) openDownloads(); pendingShare = null }
             }
 
-            AnimatedContent(screen, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "screen") { s ->
-                when (s) {
-                    Screen.PLAYER -> PlayerScreen(
-                        vm,
-                        onAddFiles = { picker.launch(AUDIO_TYPES) },
-                        onOpenLibrary = { screen = Screen.LIBRARY },
-                        onEditTags = openTags,
-                        onOpenDj = { screen = Screen.DJ },
-                    )
-                    Screen.LIBRARY -> LibraryScreen(
-                        libraryVm, vm, playerState.current?.uri,
-                        onBack = { screen = Screen.PLAYER },
-                        onImport = { importVm.restart(); screen = Screen.IMPORT },
-                        onNewAlbum = { albumVm.startOver(); screen = Screen.ALBUM },
-                        onEditTags = openTags,
-                        onDownloads = openDownloads,
-                    )
-                    Screen.IMPORT -> ImportWizardScreen(
-                        importVm,
-                        onClose = { screen = Screen.LIBRARY },
-                        onOpenLibrary = { screen = Screen.LIBRARY },
-                    )
-                    Screen.TAGS -> TagEditorScreen(tagVm, vm, onClose = { screen = tagsReturn })
-                    Screen.DJ -> DjScreen(djVm, vm, onClose = { screen = Screen.PLAYER })
-                    Screen.DOWNLOADS -> DownloadsScreen(downloadsVm, vm, onClose = { screen = downloadsReturn })
-                    Screen.ALBUM -> AlbumWizardScreen(
-                        albumVm,
-                        onClose = { screen = Screen.LIBRARY },
-                        onPlay = { tracks ->
-                            vm.playTracks(tracks.map { it.toTrackInfo() })
-                            screen = Screen.PLAYER
-                        },
-                    )
+            Box(Modifier.fillMaxSize()) {
+                AnimatedContent(screen, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "screen") { s ->
+                    when (s) {
+                        Screen.PLAYER -> PlayerScreen(
+                            vm,
+                            onAddFiles = { picker.launch(AUDIO_TYPES) },
+                            onOpenLibrary = { screen = Screen.LIBRARY },
+                            onEditTags = openTags,
+                            onOpenDj = { screen = Screen.DJ },
+                            onLyrics = { openLyrics(null) },
+                            onSaveQueue = { uris ->
+                                libraryVm.setTab(com.koro.kororythm.ui.library.LibTab.PLAYLISTS)
+                                libraryVm.saveQueue(uris)
+                                screen = Screen.LIBRARY
+                            },
+                        )
+                        Screen.LIBRARY -> LibraryScreen(
+                            libraryVm, vm, playerState.current?.uri,
+                            onBack = { screen = Screen.PLAYER },
+                            onImport = { importVm.restart(); screen = Screen.IMPORT },
+                            onNewAlbum = { albumVm.startOver(); screen = Screen.ALBUM },
+                            onEditTags = openTags,
+                            onDownloads = openDownloads,
+                            onUpgrade = { t -> upgradeVm.start(t) },
+                            onLyrics = { t -> openLyrics(if (t.uri == playerState.current?.uri) null else t.toTrackInfo()) },
+                        )
+                        Screen.IMPORT -> ImportWizardScreen(
+                            importVm,
+                            onClose = { screen = Screen.LIBRARY },
+                            onOpenLibrary = { screen = Screen.LIBRARY },
+                        )
+                        Screen.TAGS -> TagEditorScreen(tagVm, vm, onClose = { screen = tagsReturn })
+                        Screen.DJ -> DjScreen(djVm, vm, onClose = { screen = Screen.PLAYER })
+                        Screen.DOWNLOADS -> DownloadsScreen(downloadsVm, vm, onClose = { screen = downloadsReturn })
+                        Screen.LYRICS -> LyricsScreen(lyricsVm, vm, onClose = { screen = lyricsReturn }, fixed = lyricsTrack)
+                        Screen.ALBUM -> AlbumWizardScreen(
+                            albumVm,
+                            onClose = { screen = Screen.LIBRARY },
+                            onPlay = { tracks ->
+                                vm.playTracks(tracks.map { it.toTrackInfo() })
+                                screen = Screen.PLAYER
+                            },
+                        )
+                    }
                 }
+                UpgradeHost(upgradeVm, vm)
             }
         }
         if (savedInstanceState == null) handleOpenWith(intent)

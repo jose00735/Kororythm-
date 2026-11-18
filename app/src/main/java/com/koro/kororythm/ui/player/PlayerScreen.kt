@@ -46,7 +46,15 @@ import com.koro.kororythm.ui.viz.rememberVizState
  * landscape / on tablets. The grid draws itself on launch, then the panels fade in.
  */
 @Composable
-fun PlayerScreen(vm: PlayerViewModel, onAddFiles: () -> Unit, onOpenLibrary: () -> Unit = {}, onEditTags: (String) -> Unit = {}, onOpenDj: () -> Unit = {}) {
+fun PlayerScreen(
+    vm: PlayerViewModel,
+    onAddFiles: () -> Unit,
+    onOpenLibrary: () -> Unit = {},
+    onEditTags: (String) -> Unit = {},
+    onOpenDj: () -> Unit = {},
+    onLyrics: () -> Unit = {},
+    onSaveQueue: (List<String>) -> Unit = {},
+) {
     val st by vm.state.collectAsStateWithLifecycle()
     val eq by AudioBus.eq.collectAsStateWithLifecycle()
     val output by AudioBus.output.collectAsStateWithLifecycle()
@@ -67,7 +75,7 @@ fun PlayerScreen(vm: PlayerViewModel, onAddFiles: () -> Unit, onOpenLibrary: () 
     }
 
     Box(Modifier.fillMaxSize()) {
-        PlayerLayout(st, eq, output, viz, vm, onAddFiles, boot.value, onOpenLibrary, onEditTags, onOpenDj)
+        PlayerLayout(st, eq, output, viz, vm, onAddFiles, boot.value, onOpenLibrary, onEditTags, onOpenDj, onLyrics, onSaveQueue)
         overlay?.let { e ->
             key(e) { DeviceOverlay(e) { if (overlay === e) overlay = null } }
         }
@@ -87,6 +95,8 @@ fun PlayerLayout(
     onOpenLibrary: () -> Unit = {},
     onEditTags: (String) -> Unit = {},
     onOpenDj: () -> Unit = {},
+    onLyrics: () -> Unit = {},
+    onSaveQueue: (List<String>) -> Unit = {},
 ) {
     var mainShade by rememberSaveable { mutableStateOf(false) }
     var eqShade by rememberSaveable { mutableStateOf(false) }
@@ -103,13 +113,13 @@ fun PlayerLayout(
         ) {
             val wide = maxWidth > 640.dp
             val main: @Composable (Modifier) -> Unit = { m ->
-                MainPanel(st, viz, output, actions, onAddFiles, mainShade, { mainShade = !mainShade }, m, onEditTags, onOpenDj)
+                MainPanel(st, viz, output, actions, onAddFiles, mainShade, { mainShade = !mainShade }, m, onEditTags, onOpenDj, onLyrics)
             }
             val eqPanel: @Composable (Modifier) -> Unit = { m ->
                 EqPanel(eq, actions, eqShade, { eqShade = !eqShade }, m)
             }
             val list: @Composable (Modifier) -> Unit = { m ->
-                PlaylistPanel(st, actions, onAddFiles, listShade, { listShade = !listShade }, m)
+                PlaylistPanel(st, actions, onAddFiles, listShade, { listShade = !listShade }, m, onSaveQueue)
             }
             if (wide) {
                 Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {

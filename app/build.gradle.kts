@@ -17,7 +17,17 @@ android {
         versionCode = 11
         versionName = "1.1.0"
         // yt-dlp ships Python/ffmpeg as native libs: phones only (keeps the APK smaller)
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+    }
+
+    // yt-dlp brings Python + FFmpeg per CPU type: one APK per ABI keeps each download small
+    // (arm64-v8a for any phone from the last ~8 years; armeabi-v7a for older 32-bit ones).
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a")
+            isUniversalApk = false
+        }
     }
 
     buildTypes {

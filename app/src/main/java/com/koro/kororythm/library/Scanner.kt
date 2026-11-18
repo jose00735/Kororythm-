@@ -99,6 +99,32 @@ class Scanner(private val context: Context, private val dao: LibraryDao) {
             dao.byUri(uri.toString())
         }
 
+    /**
+     * Points an existing library row at a replacement file (Upgrade quality): keeps the row id
+     * (so playlists, hot cues and play history stay), keeps the curated tags, takes the new
+     * file's technical data and queues it for a fresh BPM / loudness analysis.
+     */
+    suspend fun replaceFile(old: TrackEntity, newUri: Uri, name: String, size: Long, sampleRate: Int?, bits: Int?): TrackEntity =
+        withContext(Dispatchers.IO) {
+            val head = ByteArray(64 * 1024)
+            val len = context.contentResolver.openInputStream(newUri)?.use { ins ->
+                var read = 0
+                while (read < head.size) { val n = ins.read(head, read, head.size - read); if (n < 0) break; read += n }
+                read
+            } ?: 0
+            val fresh = readTags(Candidate(newUri, name, size, old.source, old.sourceRoot), TagRules.contentKey(head, len, size), old)
+            val row = old.copy(
+                uri = newUri.toString(),
+                durationMs = fresh.durationMs.takeIf { it > 0 } ?: old.durationMs,
+                bitrateKbps = fresh.bitrateKbps, sampleRate = sampleRate ?: fresh.sampleRate, bits = bits ?: fresh.bits,
+                codec = fresh.codec, sizeBytes = size, contentKey = fresh.contentKey,
+                artPath = old.artPath ?: fresh.artPath,
+                bpm = null, gainDb = null, analyzed = false,
+            )
+            dao.update(row)
+            row
+        }
+
     private suspend fun process(c: Candidate): ScanResult {
         val uriStr = c.uri.toString()
         val existing = dao.byUri(uriStr)

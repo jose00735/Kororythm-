@@ -106,6 +106,7 @@ fun MainPanel(
     modifier: Modifier = Modifier,
     onEditTags: (String) -> Unit = {},
     onOpenDj: () -> Unit = {},
+    onLyrics: () -> Unit = {},
 ) {
     var vizMode by rememberSaveable { mutableStateOf(VizMode.BARS) }
     var remaining by rememberSaveable { mutableStateOf(false) }
@@ -194,7 +195,8 @@ fun MainPanel(
                 active = st.repeatMode != Player.REPEAT_MODE_OFF,
             )
             Spacer(Modifier.weight(1f))
-            cur?.let { c -> NeonButton("✎ TAGS", { onEditTags(c.uri) }) }
+            cur?.let { c -> NeonButton("✎", { onEditTags(c.uri) }) }
+            NeonButton("♪ LYRICS", onLyrics)
             NeonButton("DJ", onOpenDj, accent = Neon.Orange)
         }
     }
@@ -283,6 +285,7 @@ fun PlaylistPanel(
     shaded: Boolean,
     onToggleShade: () -> Unit,
     modifier: Modifier = Modifier,
+    onSaveQueue: (List<String>) -> Unit = {},
 ) {
     val summary = "${st.queue.size} TRACKS · ${formatTime(st.totalMs)}"
     NeonPanel(
@@ -331,6 +334,7 @@ fun PlaylistPanel(
         ) {
             NeonButton("+ ADD", onAddFiles, accent = Neon.Orange)
             NeonButton("CLEAR", vm::clear)
+            if (st.queue.isNotEmpty()) NeonButton("SAVE ☰", { onSaveQueue(st.queue.map { it.uri }) })
             Spacer(Modifier.weight(1f))
             NeonText(summary, size = 10.sp, color = Neon.Dim, glow = null)
         }

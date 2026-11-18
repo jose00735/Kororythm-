@@ -1,5 +1,6 @@
 package com.koro.kororythm.downloads
 
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.media.MediaScannerConnection
@@ -26,27 +27,38 @@ object MusicStore {
                 put(MediaStore.Audio.Media.IS_PENDING, 1)
                 put(MediaStore.Audio.Media.IS_MUSIC, 1)
             }
-            val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-            val uri = cr.insert(collection, values) ?: return null
+            // The audio collection only accepts Music/, Podcasts/… ; songs kept in Download/ go through Downloads.
+            val downloads = relativePath.startsWith(Environment.DIRECTORY_DOWNLOADS)
+            if (downloads) values.remove(MediaStore.Audio.Media.IS_MUSIC)
+            val collection = if (downloads) MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            else MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            val inserted = cr.insert(collection, values) ?: return null
+            // Same row, in the form the library scanner uses (content://media/external/audio/media/<id>).
+            val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL), ContentUris.parseId(inserted))
             try {
-                cr.openOutputStream(uri, "w")!!.use { out -> file.inputStream().use { it.copyTo(out) } }
-                cr.update(uri, ContentValues().apply { put(MediaStore.Audio.Media.IS_PENDING, 0) }, null, null)
+                cr.openOutputStream(inserted, "w")!!.use { out -> file.inputStream().use { it.copyTo(out) } }
+                cr.update(inserted, ContentValues().apply { put(MediaStore.Audio.Media.IS_PENDING, 0) }, null, null)
                 uri
             } catch (e: Exception) {
-                cr.delete(uri, null, null)
+                cr.delete(inserted, null, null)
                 throw e
             }
         } else {
             // Android 8–9: plain file in the public Music folder (needs WRITE_EXTERNAL_STORAGE), then index it.
             @Suppress("DEPRECATION")
             val root = Environment.getExternalStorageDirectory()
-            val dir = File(root, relativePath).apply { mkdirs() }
-            var dst = File(dir, displayName)
-            var n = 2
-            while (dst.exists()) dst = File(dir, displayName.substringBeforeLast('.') + " ($n)." + displayName.substringAfterLast('.')).also { n++ }
-            file.copyTo(dst)
-            scan(context, dst, mime)
+            saveLegacy(context, file, displayName, mime, File(root, relativePath))
         }
+    }
+
+    /** Android 8–9: copy into [dir] (adding " (2)" if the name is taken) and index it. */
+    suspend fun saveLegacy(context: Context, file: File, displayName: String, mime: String, dir: File): Uri? {
+        dir.mkdirs()
+        var dst = File(dir, displayName)
+        var n = 2
+        while (dst.exists()) dst = File(dir, displayName.substringBeforeLast('.') + " ($n)." + displayName.substringAfterLast('.')).also { n++ }
+        file.copyTo(dst)
+        return scan(context, dst, mime)
     }
 
     private suspend fun scan(context: Context, file: File, mime: String): Uri? = suspendCancellableCoroutine { c ->

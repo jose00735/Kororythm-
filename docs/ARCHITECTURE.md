@@ -244,3 +244,19 @@ What was built, and where it differs from the plan above.
 | Skins | `SkinState` + palette roles; every drawing primitive asks the current skin, so switching repaints the whole app |
 | Widget | Jetpack Glance mini player |
 | Database | Room v2 adds `bpm`, `gainDb`, `analyzed` and `hot_cues` (migration keeps existing libraries) |
+
+## v1.1 implementation notes
+
+| Area | As built |
+| --- | --- |
+| Downloads | `downloads/`: `YtEngine` wraps youtubedl-android 0.18.1 (yt-dlp + Python + FFmpeg as native libs, `useLegacyPackaging` so they're extracted). `DownloadWorker` (WorkManager, foreground `dataSync`) runs `-f bestaudio -x` and either `--audio-format mp3 --audio-quality 0` or keeps the stream; cancel kills the yt-dlp process |
+| Saving | `MusicStore` inserts into MediaStore with `RELATIVE_PATH=Music/Kororythm/` (`IS_PENDING` while copying); Android 8–9 writes the file and runs the media scanner. URIs are normalised to `content://media/external/audio/media/<id>`, the form the scanner uses, so rescans don't drop the row |
+| Honest quality | The best audio stream's codec/bitrate is shown before downloading and written into the MP3 as `TXXX:KORORYTHM_SOURCE = youtube;opus;135`; `Quality.withSource` caps the file's bitrate at that value |
+| Share sheet | `SEND text/plain` intent filter on `MainActivity`; the first URL in the text opens Downloads and is read at once |
+| Playlists | Room v3: `playlists`, `playlist_tracks(playlistId, position, trackId)` with cascading foreign keys, so deleting a track or playlist cleans up. Order is rewritten in one transaction on reorder |
+| Upgrade quality | `Quality.compare` (pure, unit-tested) + `Upgrader`: FLAC bit depth/rate read from STREAMINFO (Android only reports them on 12+), new file written next to the old one with its tags/cover/lyrics, old file deleted (`createDeleteRequest` / `RecoverableSecurityException` consent / SAF `deleteDocument`), then the same library row is repointed (`Scanner.replaceFile`) so ids, hot cues and playlist entries survive; analysis is reset |
+| Lyrics | `lyrics/Lyrics.kt`: LRC parser (several stamps per line, 1–3-digit fractions, `[offset:]`) and LRCLIB client (`/api/get`, then `/api/search` picking the closest duration within 10 s, synced preferred). Stored in the `lyrics` table by URI; `TagIo` writes FLAC `LYRICS=` or MP3 `USLT` on request and otherwise keeps existing lyrics |
+| Cover flow | Custom layout (not a LazyRow) so the centre cover is drawn and hit-tested last; `graphicsLayer` rotationY ±55°, drag with velocity-based snap, reflections via an offscreen layer with a `DstIn` gradient |
+| Packaging | ABI splits (arm64-v8a, armeabi-v7a); R8 keeps `com.yausername.**` and Jackson-annotated members |
+| License | GPL-3.0 for the app (required by youtubedl-android); see `NOTICE.md` |
+

@@ -96,4 +96,14 @@ object Quality {
     }
 
     const val SOURCE_DESC = "KORORYTHM_SOURCE"
+
+    /** Sample rate and bit depth from a FLAC file's STREAMINFO block (first 42 bytes). */
+    fun flacInfo(head: ByteArray): Pair<Int, Int>? {
+        if (head.size < 26 || String(head, 0, 4, Charsets.ISO_8859_1) != "fLaC" || (head[4].toInt() and 0x7F) != 0) return null
+        val b = 8 // STREAMINFO body
+        fun u(i: Int) = head[b + i].toInt() and 0xFF
+        val rate = (u(10) shl 12) or (u(11) shl 4) or (u(12) shr 4)
+        val bits = (((u(12) and 0x01) shl 4) or (u(13) shr 4)) + 1
+        return if (rate > 0) rate to bits else null
+    }
 }
