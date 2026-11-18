@@ -120,7 +120,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         } catch (e: YoutubeDL.CanceledException) {
             Result.failure(err("Cancelled"))
         } catch (e: Exception) {
-            if (isStopped) Result.failure(err("Cancelled")) else Result.failure(err(lastError(e.message)))
+            if (isStopped) Result.failure(err("Cancelled")) else Result.failure(err(describe(e)))
         } finally {
             work.deleteRecursively()
         }

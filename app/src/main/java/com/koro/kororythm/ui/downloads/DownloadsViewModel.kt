@@ -112,8 +112,7 @@ class DownloadsViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 .onFailure { e ->
-                    val msg = e.message?.lines()?.lastOrNull { l -> l.contains("ERROR") }?.substringAfter("ERROR:")?.trim() ?: e.message
-                    _ui.update { it.copy(fetching = false, error = (msg ?: "Couldn't read that link") + "  · If this keeps happening, tap UPDATE ENGINE.") }
+                    _ui.update { it.copy(fetching = false, error = "Couldn't read that link: ${com.koro.kororythm.downloads.describe(e)}") }
                 }
         }
     }
@@ -149,7 +148,7 @@ class DownloadsViewModel(app: Application) : AndroidViewModel(app) {
         if (_ui.value.updating) return
         _ui.update { it.copy(updating = true, updateMessage = "Checking for a new yt-dlp…") }
         viewModelScope.launch {
-            val msg = runCatching { YtEngine.update(getApplication()) }.getOrElse { "Update failed: ${it.message?.take(120)}" }
+            val msg = runCatching { YtEngine.update(getApplication()) }.getOrElse { "Update failed: ${com.koro.kororythm.downloads.describe(it)}" }
             _ui.update { it.copy(updating = false, updateMessage = msg, engineVersion = YtEngine.version(getApplication())) }
         }
     }

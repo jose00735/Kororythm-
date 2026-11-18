@@ -8,6 +8,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.io.File
+
+/** Readable error text: yt-dlp's own "ERROR:" line, else the exception and its cause. */
+fun describe(e: Throwable): String {
+    val text = generateSequence(e) { it.cause }.mapNotNull { it.message }.joinToString("\n")
+    text.lines().lastOrNull { it.contains("ERROR") }?.let { return it.substringAfter("ERROR:").trim().take(220) }
+    val root = generateSequence(e) { it.cause }.last()
+    return (root.message?.takeIf { it.isNotBlank() } ?: root.javaClass.simpleName).take(220)
+}
 
 /** What the site says about a link, before downloading. */
 data class DlInfo(
@@ -35,8 +44,16 @@ object YtEngine {
     suspend fun ensure(context: Context) = withContext(Dispatchers.IO) {
         lock.withLock {
             if (!ready) {
-                YoutubeDL.getInstance().init(context.applicationContext)
-                FFmpeg.getInstance().init(context.applicationContext)
+                val app = context.applicationContext
+                try {
+                    YoutubeDL.getInstance().init(app)
+                    FFmpeg.getInstance().init(app)
+                } catch (e: Throwable) {
+                    // A half-unpacked engine (e.g. from an earlier failed start) is wiped and unpacked again.
+                    File(app.noBackupFilesDir, YoutubeDL.baseName).deleteRecursively()
+                    YoutubeDL.getInstance().init(app)
+                    FFmpeg.getInstance().init(app)
+                }
                 ready = true
             }
         }

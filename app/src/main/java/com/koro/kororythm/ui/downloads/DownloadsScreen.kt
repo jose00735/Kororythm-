@@ -183,10 +183,6 @@ fun DownloadsContent(ui: DlUi, cb: DlCallbacks) {
                     Spacer(Modifier.width(10.dp))
                     NeonText(ui.updateMessage ?: "Sites change; update if links stop working.", Modifier.weight(1f), size = 10.sp, color = Neon.Dim, glow = null, maxLines = 2)
                 }
-                NeonText(
-                    "Download only what you have the right to keep. yt-dlp is public domain (Unlicense); Kororythm is GPL-3.0.",
-                    Modifier.padding(top = 8.dp), size = 9.sp, color = Neon.Dim, glow = null, maxLines = 3,
-                )
             }
             Spacer(Modifier.height(20.dp))
         }
