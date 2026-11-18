@@ -19,7 +19,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import com.koro.kororythm.playback.TrackInfo
-import com.koro.kororythm.ui.lyrics.LyricsScreen
+import com.koro.kororythm.ui.lyrics.LyricsDropHost
+import com.koro.kororythm.ui.viz.rememberVizState
 import com.koro.kororythm.ui.lyrics.LyricsViewModel
 import com.koro.kororythm.ui.upgrade.UpgradeHost
 import com.koro.kororythm.ui.upgrade.UpgradeViewModel
@@ -43,7 +44,7 @@ import com.koro.kororythm.ui.wizards.AlbumWizardViewModel
 import com.koro.kororythm.ui.wizards.ImportViewModel
 import com.koro.kororythm.ui.wizards.ImportWizardScreen
 
-enum class Screen { PLAYER, LIBRARY, IMPORT, ALBUM, TAGS, DJ, DOWNLOADS, LYRICS }
+enum class Screen { PLAYER, LIBRARY, IMPORT, ALBUM, TAGS, DJ, DOWNLOADS }
 
 class MainActivity : ComponentActivity() {
 
@@ -80,10 +81,12 @@ class MainActivity : ComponentActivity() {
             var downloadsReturn by rememberSaveable { mutableStateOf(Screen.PLAYER) }
             BackHandler(enabled = screen == Screen.DOWNLOADS) { screen = downloadsReturn }
             val openDownloads: () -> Unit = { downloadsReturn = screen; screen = Screen.DOWNLOADS }
-            var lyricsReturn by rememberSaveable { mutableStateOf(Screen.PLAYER) }
+            // Lyrics drop down over any screen, like a Guake console.
+            var lyricsOpen by rememberSaveable { mutableStateOf(false) }
             var lyricsTrack by remember { mutableStateOf<TrackInfo?>(null) }
-            BackHandler(enabled = screen == Screen.LYRICS) { screen = lyricsReturn }
-            val openLyrics: (TrackInfo?) -> Unit = { t -> lyricsTrack = t; lyricsReturn = screen; screen = Screen.LYRICS }
+            val openLyrics: (TrackInfo?) -> Unit = { t -> lyricsTrack = t; lyricsOpen = true }
+            // One reader of the audio spectrum, shared by the player visualizer and the lyrics backdrop.
+            val viz = rememberVizState()
             LaunchedEffect(pendingShare) {
                 pendingShare?.let { downloadsVm.shared(it); if (screen != Screen.DOWNLOADS) openDownloads(); pendingShare = null }
             }
@@ -97,7 +100,8 @@ class MainActivity : ComponentActivity() {
                             onOpenLibrary = { screen = Screen.LIBRARY },
                             onEditTags = openTags,
                             onOpenDj = { screen = Screen.DJ },
-                            onLyrics = { openLyrics(null) },
+                            onLyrics = { if (lyricsOpen) lyricsOpen = false else openLyrics(null) },
+                            viz = viz,
                             onSaveQueue = { uris ->
                                 libraryVm.setTab(com.koro.kororythm.ui.library.LibTab.PLAYLISTS)
                                 libraryVm.saveQueue(uris)
@@ -122,7 +126,6 @@ class MainActivity : ComponentActivity() {
                         Screen.TAGS -> TagEditorScreen(tagVm, vm, onClose = { screen = tagsReturn })
                         Screen.DJ -> DjScreen(djVm, vm, onClose = { screen = Screen.PLAYER })
                         Screen.DOWNLOADS -> DownloadsScreen(downloadsVm, vm, onClose = { screen = downloadsReturn })
-                        Screen.LYRICS -> LyricsScreen(lyricsVm, vm, onClose = { screen = lyricsReturn }, fixed = lyricsTrack)
                         Screen.ALBUM -> AlbumWizardScreen(
                             albumVm,
                             onClose = { screen = Screen.LIBRARY },
@@ -133,6 +136,7 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
+                LyricsDropHost(lyricsVm, vm, lyricsOpen, lyricsTrack, viz, onClose = { lyricsOpen = false })
                 UpgradeHost(upgradeVm, vm)
             }
         }

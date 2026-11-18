@@ -224,7 +224,15 @@ class TagEditViewModel(app: Application) : AndroidViewModel(app) {
                 delay(300) // let the player close the file if it was playing it
                 val tagged = FileAccess.rewrite(app, uri, tags)
                 var newUri = uri
-                if (s.renamed) newUri = FileAccess.rename(app, uri, TagNaming.sanitize(s.fileBase) + s.ext)
+                var renameNote: String? = null
+                if (s.renamed) {
+                    try {
+                        newUri = FileAccess.rename(app, uri, TagNaming.sanitize(s.fileBase) + s.ext)
+                    } catch (e: com.koro.kororythm.tags.RenameUnsupported) {
+                        renameNote = "Tags saved. ${e.message}"
+                    }
+                }
+                if (newUri.toString() != uriStr) Library.dao.moveLyrics(uriStr, newUri.toString())
                 val info = reindex(uriStr, newUri.toString(), tagged.length(), tagged.inputStream().use { ins ->
                     val head = ByteArray(64 * 1024)
                     val n = ins.read(head).coerceAtLeast(0)
@@ -235,7 +243,9 @@ class TagEditViewModel(app: Application) : AndroidViewModel(app) {
                 _ui.update {
                     it.copy(
                         uri = newUri.toString(), busy = null, saved = true, coverChanged = false, coverRemoved = false,
-                        originalBase = it.fileBase, message = if (s.renamed) "Saved into the file and renamed." else "Saved into the file.",
+                        originalBase = if (renameNote != null) it.originalBase else it.fileBase,
+                        fileBase = if (renameNote != null) it.originalBase else it.fileBase,
+                        message = renameNote ?: if (s.renamed) "Saved into the file and renamed." else "Saved into the file.",
                     )
                 }
             } catch (e: Exception) {

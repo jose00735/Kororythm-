@@ -167,7 +167,7 @@ private fun LibraryPage(ui: LibraryUi, cb: LibraryCallbacks, nowPlayingUri: Stri
         }
         val detail = ui.detail
         if (detail != null) {
-            DetailView(detail, cb, nowPlayingUri)
+            DetailView(detail, cb, nowPlayingUri, ui.coverFlow)
             return@NeonScreen
         }
         NeonTextField(ui.query, cb::query, Modifier.fillMaxWidth(), placeholder = "Search ${ui.count} tracks, albums, artists")
@@ -190,7 +190,7 @@ private fun LibraryPage(ui: LibraryUi, cb: LibraryCallbacks, nowPlayingUri: Stri
                         AlbumGrid(cards) { i -> cb.openAlbum(ui.albums[i]) }
                     }
                 }
-                LibTab.PLAYLISTS -> PlaylistList(ui.playlists, cb)
+                LibTab.PLAYLISTS -> PlaylistList(ui.playlists, cb, ui.coverFlow)
                 LibTab.ARTISTS -> ArtistList(ui.artists, cb)
                 LibTab.MINE -> if (ui.mine.isEmpty()) {
                     Hint("No albums of your own yet.\nTap + ALBUM to compile one from your tracks.")
@@ -272,7 +272,7 @@ private fun TrackRow(
     }
 }
 
-data class AlbumCard(val title: String, val subtitle: String, val meta: String, val artPath: String?, val coverUri: String?)
+data class AlbumCard(val title: String, val subtitle: String, val meta: String, val artPath: String?, val coverUri: String?, val audioUri: String? = null)
 
 @Composable
 private fun AlbumGrid(cards: List<AlbumCard>, onOpen: (Int) -> Unit) {
@@ -318,7 +318,7 @@ private fun ArtistList(artists: List<ArtistSummary>, cb: LibraryCallbacks) {
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun DetailView(d: LibDetail, cb: LibraryCallbacks, nowPlayingUri: String?) {
+private fun DetailView(d: LibDetail, cb: LibraryCallbacks, nowPlayingUri: String?, coverFlow: Boolean = false) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         ArtThumb(d.artPath ?: d.tracks.firstNotNullOfOrNull { it.artPath }, size = 110.dp, contentUri = d.coverUri)
         Spacer(Modifier.width(14.dp))
@@ -329,6 +329,7 @@ private fun DetailView(d: LibDetail, cb: LibraryCallbacks, nowPlayingUri: String
             androidx.compose.foundation.layout.FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 NeonButton("▶ PLAY ALL", { cb.play(d.tracks, 0) }, active = true, accent = Neon.Orange)
                 NeonButton("+ ADD", { cb.enqueue(d.tracks) })
+                if (d.tracks.size > 1) NeonButton(if (coverFlow) "▦ LIST" else "◫ COVER FLOW", cb::coverFlow, active = coverFlow)
                 d.userAlbumId?.let { id -> NeonButton("DELETE", { cb.deleteUserAlbum(id) }) }
                 d.playlistId?.let { id ->
                     NeonButton("RENAME", { cb.renamePlaylist(id, d.title) })
@@ -339,6 +340,15 @@ private fun DetailView(d: LibDetail, cb: LibraryCallbacks, nowPlayingUri: String
     }
     Spacer(Modifier.height(10.dp))
     Box(Modifier.fillMaxSize().background(Neon.Panel, RoundedCornerShape(10.dp)).neonBorder(Neon.Cyan, 10.dp, 0.7f).padding(6.dp)) {
+        if (coverFlow && d.tracks.size > 1) {
+            val playing = d.tracks.indexOfFirst { it.uri == nowPlayingUri }
+            CoverFlow(
+                d.tracks.map { AlbumCard(it.title, it.artist ?: "Unknown artist", listOfNotNull(it.codec, formatTime(it.durationMs)).joinToString(" · "), it.artPath, null, it.uri) },
+                onOpen = { i -> cb.play(d.tracks, i) }, onPlay = { i -> cb.play(d.tracks, i) },
+                initial = playing.coerceAtLeast(0), actionLabel = "▶ PLAY", highlight = playing,
+            )
+            return@Box
+        }
         if (d.tracks.isEmpty() && d.playlistId != null) Hint("This playlist is empty.\nIn TRACKS, tap ⋮ on a song ▸ ADD TO PLAYLIST.")
         LazyColumn(Modifier.fillMaxSize()) {
             itemsIndexed(d.tracks, key = { i, t -> "$i:${t.id}" }) { i, t ->

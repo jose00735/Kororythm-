@@ -299,7 +299,16 @@ fun PlaylistPanel(
         LaunchedEffect(st.currentIndex) {
             if (st.currentIndex >= 0) listState.animateScrollToItem(st.currentIndex)
         }
-        if (st.queue.isEmpty()) {
+        var flow by rememberSaveable { mutableStateOf(false) }
+        if (flow && st.queue.size > 1) {
+            Box(Modifier.fillMaxWidth().height(330.dp)) {
+                com.koro.kororythm.ui.library.CoverFlow(
+                    st.queue.map { com.koro.kororythm.ui.library.AlbumCard(it.title, it.artist ?: "Unknown artist", listOfNotNull(it.codec, formatTime(it.durationMs)).joinToString(" · "), null, null, it.uri) },
+                    onOpen = vm::playAt, onPlay = vm::playAt,
+                    initial = st.currentIndex.coerceAtLeast(0), actionLabel = "▶ PLAY", highlight = st.currentIndex,
+                )
+            }
+        } else if (st.queue.isEmpty()) {
             Box(Modifier.fillMaxWidth().weight(1f, fill = false).padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
                 NeonText("Tap + ADD to load FLAC or MP3 files", size = 12.sp, color = Neon.Dim, glow = null)
             }
@@ -335,6 +344,7 @@ fun PlaylistPanel(
             NeonButton("+ ADD", onAddFiles, accent = Neon.Orange)
             NeonButton("CLEAR", vm::clear)
             if (st.queue.isNotEmpty()) NeonButton("SAVE ☰", { onSaveQueue(st.queue.map { it.uri }) })
+            if (st.queue.size > 1) NeonButton(if (flow) "▦" else "◫", { flow = !flow }, active = flow)
             Spacer(Modifier.weight(1f))
             NeonText(summary, size = 10.sp, color = Neon.Dim, glow = null)
         }

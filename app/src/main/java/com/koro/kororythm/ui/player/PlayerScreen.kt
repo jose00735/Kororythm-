@@ -54,11 +54,11 @@ fun PlayerScreen(
     onOpenDj: () -> Unit = {},
     onLyrics: () -> Unit = {},
     onSaveQueue: (List<String>) -> Unit = {},
+    viz: VizState = rememberVizState(),
 ) {
     val st by vm.state.collectAsStateWithLifecycle()
     val eq by AudioBus.eq.collectAsStateWithLifecycle()
     val output by AudioBus.output.collectAsStateWithLifecycle()
-    val viz = rememberVizState()
     val haptics = LocalHapticFeedback.current
 
     val boot = remember { Animatable(0f) }

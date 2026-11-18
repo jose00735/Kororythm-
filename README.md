@@ -34,9 +34,11 @@ Built with Kotlin, Jetpack Compose and AndroidX Media3. Design: [docs/ARCHITECTU
 - Writes the new file into the **same folder** with the old name, tags, cover and lyrics, removes the old file (Android asks once), and keeps the library row, so **hot cues and playlists stay**
 - **POWER UP!** pop-up with light burst, rings and the before → after figures (e.g. ×7.4 more sound data)
 
-**Cover flow** (Albums ▸ ◫ COVER FLOW): turned covers with floor reflections; flick, snap, tap to open
+**Cover flow** (◫ COVER FLOW in Albums, Playlists and inside any album or playlist; ◫ in the player's playlist panel for the queue): turned covers with floor reflections; flick, snap, tap to open or play
 
-**Lyrics** (♪ LYRICS on the player, or ⋮ ▸ Lyrics)
+**Lyrics console** (♪ LYRICS on the player, or ⋮ ▸ Lyrics)
+- Drops down from the top over any screen like a Guake terminal; drag the grip up, tap below or press Back to put it away
+- Behind the text, an Ambience-style backdrop (ribbons of light, drifting glow orbs, rising sparks) moves with the music: bass swells the ribbons, mids the orbs, highs the sparks
 - Found automatically on **LRCLIB**; synced lyrics light up line by line, scroll with the song, and tap-to-seek
 - **SAVE INTO FILE** writes them into the FLAC (LYRICS) or MP3 (USLT) so other players show them too
 

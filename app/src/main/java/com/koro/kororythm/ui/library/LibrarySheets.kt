@@ -180,13 +180,21 @@ fun NameDialog(p: NamePrompt, cb: LibraryCallbacks) {
 }
 
 @Composable
-fun PlaylistList(lists: List<PlaylistSummary>, cb: LibraryCallbacks) {
+fun PlaylistList(lists: List<PlaylistSummary>, cb: LibraryCallbacks, coverFlow: Boolean = false) {
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.End) {
+        Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End)) {
+            if (lists.size > 1) NeonButton(if (coverFlow) "▦ LIST" else "◫ COVER FLOW", cb::coverFlow, active = coverFlow)
             NeonButton("+ NEW PLAYLIST", { cb.newPlaylist(emptyList()) }, accent = Neon.Orange)
         }
         if (lists.isEmpty()) {
             Hint("No playlists yet.\nTap ⋮ on any song ▸ ADD TO PLAYLIST, or save the queue from the player.")
+            return@Column
+        }
+        if (coverFlow && lists.size > 1) {
+            CoverFlow(
+                lists.map { AlbumCard(it.name, "Playlist", "${it.trackCount} tracks · ${formatTime(it.durationMs)}", it.artPath, null) },
+                onOpen = { i -> cb.openPlaylist(lists[i]) }, onPlay = { i -> cb.openPlaylist(lists[i]) },
+            )
             return@Column
         }
         LazyColumn(Modifier.fillMaxSize()) {

@@ -26,7 +26,6 @@ import com.koro.kororythm.ui.library.LibraryContent
 import com.koro.kororythm.ui.library.LibraryUi
 import com.koro.kororythm.ui.library.NamePrompt
 import com.koro.kororythm.ui.lyrics.LyricsCallbacks
-import com.koro.kororythm.ui.lyrics.LyricsContent
 import com.koro.kororythm.ui.lyrics.LyricsUi
 import com.koro.kororythm.ui.skin.GridBackground
 import com.koro.kororythm.ui.skin.SkinId
@@ -173,14 +172,36 @@ class V11ScreenshotTest {
         [00:52.00] Count the lights until the dawn
     """.trimIndent()
 
-    @Test fun lyricsSynced() = both("82_lyrics_synced") {
-        LyricsContent(
-            LyricsUi(uri = "content://t/5", title = "Neon Runway", artist = "Grid Pilots", lines = Lrc.parse(lrc), plain = Lrc.toPlain(lrc), source = "LRCLIB", searched = true, canSave = true, message = "Synced lyrics found."),
-            31_500, LyricsCallbacks(),
-        )
+    private fun bars() = com.koro.kororythm.ui.viz.VizState().apply {
+        bars = FloatArray(64) { i -> (0.85f - i / 90f).coerceAtLeast(0.1f) }
+    }
+
+    @Test fun lyricsSynced() = both("82_lyrics_console") {
+        Box(Modifier.fillMaxSize()) {
+            LibraryContent(base, LibraryCallbacks())
+            com.koro.kororythm.ui.lyrics.LyricsDrop(
+                true,
+                LyricsUi(uri = "content://t/5", title = "Neon Runway", artist = "Grid Pilots", lines = Lrc.parse(lrc), plain = Lrc.toPlain(lrc), source = "LRCLIB", searched = true, canSave = true),
+                31_500, LyricsCallbacks(), bars(), frozenTime = 7.3f,
+            )
+        }
     }
 
     @Test fun lyricsEmpty() = paparazzi.snapshot("83_lyrics_none") {
-        LyricsContent(LyricsUi(uri = "content://t/1", title = "Analog Horizon", artist = "Static Coast", searched = true, error = "No lyrics found on LRCLIB for this song."), -1, LyricsCallbacks())
+        Box(Modifier.fillMaxSize()) {
+            LibraryContent(base, LibraryCallbacks())
+            com.koro.kororythm.ui.lyrics.LyricsDrop(
+                true, LyricsUi(uri = "content://t/1", title = "Analog Horizon", artist = "Static Coast", searched = true, error = "No lyrics found on LRCLIB for this song."),
+                -1, LyricsCallbacks(), null, frozenTime = 2f,
+            )
+        }
+    }
+
+    @Test fun playlistsCoverFlow() = paparazzi.snapshot("84_playlists_cover_flow") {
+        LibraryContent(base.copy(tab = LibTab.PLAYLISTS, coverFlow = true), LibraryCallbacks())
+    }
+
+    @Test fun playlistDetailCoverFlow() = both("85_playlist_cover_flow") {
+        LibraryContent(base.copy(coverFlow = true, detail = LibDetail("Late-night drive", "Playlist", null, null, tracks, playlistId = 1)), LibraryCallbacks(), "content://t/3")
     }
 }

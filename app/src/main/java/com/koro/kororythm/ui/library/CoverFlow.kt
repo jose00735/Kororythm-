@@ -53,7 +53,14 @@ import kotlin.math.sign
  * cover); tap a side cover to bring it forward, tap the centre one to open it.
  */
 @Composable
-fun CoverFlow(cards: List<AlbumCard>, onOpen: (Int) -> Unit, onPlay: (Int) -> Unit, initial: Int = 0) {
+fun CoverFlow(
+    cards: List<AlbumCard>,
+    onOpen: (Int) -> Unit,
+    onPlay: (Int) -> Unit,
+    initial: Int = 0,
+    actionLabel: String = "OPEN ▸",
+    highlight: Int = -1,
+) {
     val pos = remember(cards.size) { Animatable(initial.coerceIn(0, (cards.size - 1).coerceAtLeast(0)).toFloat()) }
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -111,7 +118,7 @@ fun CoverFlow(cards: List<AlbumCard>, onOpen: (Int) -> Unit, onPlay: (Int) -> Un
                                 .clickable { if (abs(d) < 0.5f) onOpen(i) else snapTo(i) },
                         ) {
                             val card = cards[i]
-                            ArtThumb(card.artPath, Modifier.size(cover), size = cover, contentUri = card.coverUri)
+                            ArtThumb(card.artPath, Modifier.size(cover), size = cover, contentUri = card.coverUri, audio = card.audioUri)
                             // Reflection: the same cover flipped, fading into the floor.
                             Box(
                                 Modifier.padding(top = 3.dp).size(cover, cover * 0.44f)
@@ -126,7 +133,7 @@ fun CoverFlow(cards: List<AlbumCard>, onOpen: (Int) -> Unit, onPlay: (Int) -> Un
                                     Modifier.wrapContentSize(Alignment.TopCenter, unbounded = true).size(cover).graphicsLayer {
                                         scaleY = -1f; transformOrigin = TransformOrigin(0.5f, 0.5f)
                                     },
-                                    size = cover, contentUri = card.coverUri,
+                                    size = cover, contentUri = card.coverUri, audio = card.audioUri,
                                 )
                             }
                         }
@@ -135,11 +142,11 @@ fun CoverFlow(cards: List<AlbumCard>, onOpen: (Int) -> Unit, onPlay: (Int) -> Un
             }
             val centered = pos.value.roundToInt().coerceIn(0, cards.lastIndex)
             val card = cards[centered]
-            NeonText(card.title, Modifier.padding(horizontal = 16.dp), size = 15.sp, weight = FontWeight.Bold)
+            NeonText(card.title, Modifier.padding(horizontal = 16.dp), size = 15.sp, weight = FontWeight.Bold, color = if (centered == highlight) Neon.Orange else Neon.Ink, glow = if (centered == highlight) Neon.Orange else Neon.Cyan)
             NeonText(card.subtitle, size = 11.sp, color = Neon.Cyan, glow = null)
             NeonText(card.meta, size = 10.sp, color = Neon.Dim, glow = null)
             Spacer(Modifier.height(8.dp))
-            NeonButton("OPEN ▸", { onPlay(centered) }, accent = Neon.Orange, active = true)
+            NeonButton(actionLabel, { onPlay(centered) }, accent = Neon.Orange, active = true)
             NeonText("${centered + 1} / ${cards.size}", Modifier.padding(top = 6.dp), size = 9.sp, color = Neon.Dim, glow = null)
         }
     }

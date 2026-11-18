@@ -145,8 +145,10 @@ fun ArtThumb(
     contentUri: String? = null,
     url: String? = null,
     bytes: ByteArray? = null,
+    /** An audio file: shows the cover embedded in it. */
+    audio: String? = null,
 ) {
-    val key = bytes?.let { "bytes:${it.size}:${it.contentHashCode()}" } ?: url ?: contentUri ?: path
+    val key = bytes?.let { "bytes:${it.size}:${it.contentHashCode()}" } ?: url ?: contentUri ?: path ?: audio?.let { "audio:$it" }
     val context = LocalContext.current
     val inPreview = LocalInspectionMode.current
     val image by produceState<ImageBitmap?>(null, key) {
@@ -164,6 +166,12 @@ fun ArtThumb(
                         com.koro.kororythm.tags.TagSearch.fetchCover(url)?.let { f.writeBytes(it) }
                     }
                     if (f.exists()) BitmapFactory.decodeFile(f.absolutePath, BitmapFactory.Options().apply { inSampleSize = 2 }) else null
+                } else if (path == null && audio != null) {
+                    val r = android.media.MediaMetadataRetriever()
+                    try {
+                        r.setDataSource(context, Uri.parse(audio))
+                        r.embeddedPicture?.let { b -> BitmapFactory.decodeByteArray(b, 0, b.size, BitmapFactory.Options().apply { inSampleSize = if (b.size > 400_000) 2 else 1 }) }
+                    } finally { r.release() }
                 } else if (contentUri != null) {
                     context.contentResolver.openInputStream(Uri.parse(contentUri))?.use { ins ->
                         BitmapFactory.decodeStream(ins, null, BitmapFactory.Options().apply { inSampleSize = 2 })
