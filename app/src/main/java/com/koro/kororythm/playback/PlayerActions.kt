@@ -20,4 +20,10 @@ interface PlayerActions {
     fun toggleBoost()
     fun applyPreset(name: String)
     fun resetEq()
+
+    /** Replaces the queue with [tracks] and plays from [start] (library "play"). */
+    fun playTracks(tracks: List<TrackInfo>, start: Int = 0) {}
+
+    /** Adds [tracks] to the end of the queue (library "add"). */
+    fun enqueue(tracks: List<TrackInfo>) {}
 }

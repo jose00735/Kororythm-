@@ -324,7 +324,7 @@ fun PlaylistPanel(
 
 /** Small header: parrot mark + name. */
 @Composable
-fun Header(output: OutputDevice, modifier: Modifier = Modifier) {
+fun Header(output: OutputDevice, modifier: Modifier = Modifier, onOpenLibrary: () -> Unit = {}) {
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Canvas(Modifier.size(34.dp)) { drawParrot(Offset.Zero, size.minDimension) }
         Spacer(Modifier.width(8.dp))
@@ -334,6 +334,8 @@ fun Header(output: OutputDevice, modifier: Modifier = Modifier) {
             Box(Modifier.neonBorder(Neon.Orange, 4.dp, 0.6f).padding(horizontal = 6.dp, vertical = 2.dp)) {
                 NeonText("BIT-PERFECT READY", size = 8.sp, color = Neon.Orange, glow = Neon.Orange, weight = FontWeight.Bold)
             }
+            Spacer(Modifier.width(8.dp))
         }
+        NeonButton("LIBRARY", onOpenLibrary, accent = Neon.Orange)
     }
 }

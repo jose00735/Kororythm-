@@ -12,6 +12,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.koro.kororythm.dsp.EqPresets
 import com.koro.kororythm.dsp.EqStore
+import com.koro.kororythm.library.Library
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -146,6 +147,28 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app), PlayerActions {
         }
     }
 
+    override fun playTracks(tracks: List<TrackInfo>, start: Int) {
+        if (tracks.isEmpty()) return
+        viewModelScope.launch {
+            val c = controllerReady.await()
+            c.setMediaItems(tracks.map { it.toMediaItem() }, start.coerceIn(0, tracks.lastIndex), 0)
+            c.prepare()
+            c.play()
+            saveQueue()
+        }
+    }
+
+    override fun enqueue(tracks: List<TrackInfo>) {
+        if (tracks.isEmpty()) return
+        viewModelScope.launch {
+            val c = controllerReady.await()
+            val wasEmpty = c.mediaItemCount == 0
+            c.addMediaItems(tracks.map { it.toMediaItem() })
+            if (wasEmpty) c.prepare()
+            saveQueue()
+        }
+    }
+
     override fun removeAt(index: Int) {
         controller?.removeMediaItem(index); saveQueue()
     }
@@ -163,13 +186,19 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app), PlayerActions {
     private suspend fun restoreQueue(c: MediaController) {
         val app = getApplication<Application>()
         val saved = prefs.getString("uris", null)?.lines()?.filter { it.isNotBlank() } ?: return
-        val granted = app.contentResolver.persistedUriPermissions.map { it.uri.toString() }.toSet()
-        val usable = saved.filter { it in granted }
-        if (usable.isEmpty()) return
-        val infos = withContext(Dispatchers.IO) { usable.map { TrackInfo.read(app, Uri.parse(it)) } }
+        val infos = withContext(Dispatchers.IO) {
+            saved.mapNotNull { s ->
+                // Library tracks come straight from the database; others are re-read if still readable.
+                Library.dao.byUri(s)?.toTrackInfo() ?: Uri.parse(s).takeIf { canRead(app, it) }?.let { TrackInfo.read(app, it) }
+            }
+        }
+        if (infos.isEmpty()) return
         c.setMediaItems(infos.map { it.toMediaItem() })
         c.prepare()
     }
+
+    private fun canRead(app: Application, uri: Uri): Boolean =
+        runCatching { app.contentResolver.openAssetFileDescriptor(uri, "r")?.use { true } ?: false }.getOrDefault(false)
 
     // ---- EQ ----
     override fun setBand(i: Int, db: Float) = EqStore.update { s ->

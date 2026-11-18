@@ -10,9 +10,24 @@ An Android music player for FLAC and MP3 with a classic Winamp layout and a neon
 
 Built with Kotlin, Jetpack Compose and AndroidX Media3. Full design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Status: phase 1 (core player)
+<p>
+  <img src="docs/screenshots/library-albums.png" width="240" alt="Library albums">
+  <img src="docs/screenshots/import-scanning.png" width="240" alt="Import wizard scanning">
+  <img src="docs/screenshots/album-order.png" width="240" alt="Album wizard ordering tracks">
+</p>
 
-**Works now**
+## Status: phase 2 (library + wizards)
+
+**New in phase 2**
+
+- Music library (Room database with full-text search): tracks, albums, artists and your own albums, with cover art
+- **Upload to the Grid** import wizard: pick the phone's music library and/or folders (phone or SD card), scan in the background with a radar animation, then review tracks with missing tags and fill them from MusicBrainz in one tap
+- Smart sync: unchanged files are skipped, changed files updated, deleted files removed, and the same song found twice is counted as a duplicate and skipped
+- Folders are rescanned on their own every 12 hours (when the battery isn't low)
+- **Compile Program** album wizard: pick tracks, set title, artist, year, genre and a cover, order them, save; auto-fills details from the picked tracks
+- Library > Play all / Add, tap a track to play from there, long-press to add it to the queue
+
+**From phase 1**
 
 - FLAC and MP3 playback, gapless, in the background (lock screen, notification, Bluetooth and headset buttons)
 - Winamp-style main, EQ and playlist panels, each with a "shade" button that rolls it into one line; side by side in landscape
@@ -26,7 +41,7 @@ Built with Kotlin, Jetpack Compose and AndroidX Media3. Full design: [docs/ARCHI
 
 **Not yet (later phases)**
 
-- Library database, import and album wizards (phase 2)
+- Writing edited tags back into the music files (tag fixes and your albums live in the Kororythm library for now), drag-and-drop reordering, ReplayGain and BPM analysis
 - DJ transitions on Next, decks and FX (phase 3)
 - Actually switching the DAC into bit-perfect mode, and full 24-bit processing (phase 4). Right now the EQ path runs at 16-bit, so 24-bit FLAC plays, but it may be reduced to 16-bit
 - Bundled display font: readouts use the system monospace font for now
@@ -37,7 +52,7 @@ Requires JDK 17+ and the Android SDK (platform 35).
 
 ```
 ./gradlew :app:assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
-./gradlew :app:testDebugUnitTest      # DSP tests (EQ gains, Boost, soft clip, FFT)
+./gradlew :app:testDebugUnitTest      # DSP + library logic tests (EQ, FFT, tag rules, MusicBrainz parsing)
 ./gradlew :app:recordPaparazziDebug   # re-render the screenshots without a phone
 ```
 

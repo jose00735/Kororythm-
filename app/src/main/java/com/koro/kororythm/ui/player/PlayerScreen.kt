@@ -46,7 +46,7 @@ import com.koro.kororythm.ui.viz.rememberVizState
  * landscape / on tablets. The grid draws itself on launch, then the panels fade in.
  */
 @Composable
-fun PlayerScreen(vm: PlayerViewModel, onAddFiles: () -> Unit) {
+fun PlayerScreen(vm: PlayerViewModel, onAddFiles: () -> Unit, onOpenLibrary: () -> Unit = {}) {
     val st by vm.state.collectAsStateWithLifecycle()
     val eq by AudioBus.eq.collectAsStateWithLifecycle()
     val output by AudioBus.output.collectAsStateWithLifecycle()
@@ -67,7 +67,7 @@ fun PlayerScreen(vm: PlayerViewModel, onAddFiles: () -> Unit) {
     }
 
     Box(Modifier.fillMaxSize()) {
-        PlayerLayout(st, eq, output, viz, vm, onAddFiles, boot.value)
+        PlayerLayout(st, eq, output, viz, vm, onAddFiles, boot.value, onOpenLibrary)
         overlay?.let { e ->
             key(e) { DeviceOverlay(e) { if (overlay === e) overlay = null } }
         }
@@ -84,6 +84,7 @@ fun PlayerLayout(
     actions: PlayerActions,
     onAddFiles: () -> Unit,
     boot: Float = 1f,
+    onOpenLibrary: () -> Unit = {},
 ) {
     var mainShade by rememberSaveable { mutableStateOf(false) }
     var eqShade by rememberSaveable { mutableStateOf(false) }
@@ -114,7 +115,7 @@ fun PlayerLayout(
                         Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Header(output)
+                        Header(output, onOpenLibrary = onOpenLibrary)
                         main(Modifier.fillMaxWidth())
                         eqPanel(Modifier.fillMaxWidth())
                     }
@@ -122,7 +123,7 @@ fun PlayerLayout(
                 }
             } else {
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Header(output)
+                    Header(output, onOpenLibrary = onOpenLibrary)
                     main(Modifier.fillMaxWidth())
                     eqPanel(Modifier.fillMaxWidth())
                     list(if (listShade) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().weight(1f))
