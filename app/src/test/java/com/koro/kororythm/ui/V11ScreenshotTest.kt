@@ -119,6 +119,32 @@ class V11ScreenshotTest {
         )
     }
 
+    @Test fun downloadsPlaylist() = both("70c_downloads_playlist") {
+        val entries = listOf("Neon Runway", "Analog Horizon", "Cyan Static", "Lightcycle Lullaby", "Midnight Circuit", "Velvet Voltage", "Tape Memory")
+            .mapIndexed { i, t -> com.koro.kororythm.downloads.PlEntry(i + 1, "id$i", "https://youtu.be/id$i", t, "Grid Pilots", t, 200 + i * 17, null) }
+        DownloadsContent(
+            DlUi(link = "https://youtube.com/playlist?list=PL1", playlist = com.koro.kororythm.downloads.Probe.Playlist("Synthwave Essentials", entries, 57), selected = setOf(1, 2, 4), engineVersion = "2026.10.26"),
+            DlCallbacks(), frozenNow = 0,
+        )
+    }
+
+    @Test fun downloadsReadingLive() = paparazzi.snapshot("70d_downloads_reading") {
+        DownloadsContent(
+            DlUi(
+                link = "https://youtube.com/watch?v=x&list=RDx", fetching = true, firstRun = false, fetchStarted = 0, lastOutput = 0,
+                fetchLines = listOf(
+                    "[youtube:tab] Extracting URL: https://youtube.com/watch?v=x&list=RDx",
+                    "[youtube:tab] RDx: Downloading webpage",
+                    "[youtube:tab] RDx: Downloading API JSON",
+                    "[download] Downloading playlist: Mix – Neon Runway",
+                    "[youtube:tab] Playlist Mix – Neon Runway: Downloading 50 items",
+                    "[download] Downloading item 23 of 50",
+                ),
+            ),
+            DlCallbacks(), frozenNow = 34_000,
+        )
+    }
+
     @Test fun downloadsEmpty() = paparazzi.snapshot("71_downloads_fetching") {
         DownloadsContent(DlUi(link = "https://youtu.be/x", fetching = true, firstRun = true), DlCallbacks())
     }

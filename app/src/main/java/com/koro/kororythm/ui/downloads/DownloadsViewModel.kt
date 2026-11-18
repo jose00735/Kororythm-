@@ -31,6 +31,8 @@ data class DlJob(
     val error: String? = null,
     val trackId: Long = -1,
     val savedAs: String? = null,
+    /** When yt-dlp last printed something (to spot a stuck download). */
+    val lastActivity: Long = 0,
 )
 
 data class DlUi(
@@ -49,6 +51,13 @@ data class DlUi(
     val updateMessage: String? = null,
     /** Job whose log starts open (previews). */
     val logOpen: UUID? = null,
+    /** yt-dlp's output while a link is being read (newest last). */
+    val fetchLines: List<String> = emptyList(),
+    val fetchStarted: Long = 0,
+    val lastOutput: Long = 0,
+    /** The link is a playlist: pick what to download. */
+    val playlist: com.koro.kororythm.downloads.Probe.Playlist? = null,
+    val selected: Set<Int> = emptySet(),
 )
 
 class DownloadsViewModel(app: Application) : AndroidViewModel(app) {
@@ -80,6 +89,7 @@ class DownloadsViewModel(app: Application) : AndroidViewModel(app) {
                 w.id, title, "", JobState.RUNNING,
                 w.progress.getString(DownloadWorker.K_STAGE) ?: "Starting",
                 w.progress.getFloat(DownloadWorker.K_PROGRESS, 0f),
+                lastActivity = w.progress.getLong(DownloadWorker.K_TIME, 0L),
             )
             else -> DlJob(w.id, title, "", JobState.QUEUED, "Waiting", 0f)
         }
@@ -98,26 +108,79 @@ class DownloadsViewModel(app: Application) : AndroidViewModel(app) {
         fetch()
     }
 
+    private var fetchId: String? = null
+    private var fetchJob: kotlinx.coroutines.Job? = null
+
     fun fetch() {
         val url = YtLogic.extractUrl(_ui.value.link)
         if (url == null) { _ui.update { it.copy(error = "Paste a link (YouTube, YouTube Music, SoundCloud, Bandcamp…)") }; return }
         if (_ui.value.fetching) return
-        _ui.update { it.copy(fetching = true, error = null, info = null, firstRun = !YtEngine.ready) }
-        viewModelScope.launch {
-            runCatching { YtEngine.info(getApplication(), url) }
-                .onSuccess { info ->
-                    _ui.update {
-                        it.copy(
-                            fetching = false, info = info, title = info.title, artist = info.artist.orEmpty(), album = "",
-                            engineVersion = YtEngine.version(getApplication()),
-                        )
+        val pid = "probe-" + UUID.randomUUID()
+        fetchId = pid
+        val now = System.currentTimeMillis()
+        _ui.update {
+            it.copy(
+                fetching = true, error = null, info = null, playlist = null, selected = emptySet(),
+                firstRun = !YtEngine.ready, fetchLines = emptyList(), fetchStarted = now, lastOutput = now,
+            )
+        }
+        fetchJob = viewModelScope.launch {
+            runCatching {
+                YtEngine.probe(getApplication(), url, pid) { line ->
+                    _ui.update { it.copy(fetchLines = (it.fetchLines + line).takeLast(200), lastOutput = System.currentTimeMillis()) }
+                }
+            }.onSuccess { probe ->
+                if (fetchId != pid) return@onSuccess
+                val version = YtEngine.version(getApplication())
+                when (probe) {
+                    is com.koro.kororythm.downloads.Probe.Single -> _ui.update {
+                        val info = probe.info
+                        it.copy(fetching = false, info = info, title = info.title, artist = info.artist.orEmpty(), album = "", engineVersion = version)
+                    }
+                    is com.koro.kororythm.downloads.Probe.Playlist -> _ui.update {
+                        // A "watch?v=…&list=…" link preselects that video; a bare playlist link selects everything.
+                        val vid = YtLogic.videoId(url)
+                        val pre = probe.entries.filter { e -> e.id == vid }.map { e -> e.index }.toSet()
+                        it.copy(fetching = false, playlist = probe, selected = pre.ifEmpty { probe.entries.map { e -> e.index }.toSet() }, album = "", engineVersion = version)
                     }
                 }
-                .onFailure { e ->
-                    _ui.update { it.copy(fetching = false, error = "Couldn't read that link: ${com.koro.kororythm.downloads.describe(e)}") }
-                }
+            }.onFailure { e ->
+                if (fetchId != pid) return@onFailure
+                val cancelled = e is com.yausername.youtubedl_android.YoutubeDL.CanceledException || e is kotlinx.coroutines.CancellationException
+                _ui.update { it.copy(fetching = false, error = if (cancelled) "Stopped." else "Couldn't read that link: ${com.koro.kororythm.downloads.describe(e)}") }
+            }
+            fetchId = null
         }
     }
+
+    /** Stops reading a link (e.g. a huge playlist or a stuck site). */
+    fun cancelFetch() {
+        val pid = fetchId ?: return
+        YtEngine.cancel(pid)
+        fetchId = null
+        fetchJob?.cancel()
+        _ui.update { it.copy(fetching = false, error = "Stopped.") }
+    }
+
+    // ---- playlists ----
+    fun toggle(index: Int) = _ui.update { it.copy(selected = if (index in it.selected) it.selected - index else it.selected + index) }
+    fun selectAll(all: Boolean) = _ui.update { s -> s.copy(selected = if (all) s.playlist?.entries?.map { it.index }?.toSet().orEmpty() else emptySet()) }
+    fun closePlaylist() = _ui.update { it.copy(playlist = null, selected = emptySet()) }
+
+    fun downloadSelected() {
+        val s = _ui.value
+        val pl = s.playlist ?: return
+        val picks = pl.entries.filter { it.index in s.selected }
+        if (picks.isEmpty()) return
+        val album = s.album.trim().ifEmpty { null }
+        picks.forEach { e ->
+            val info = DlInfo(e.url, e.videoTitle, e.artist, e.title, e.artist, e.durationSec, e.thumbnail, null, null, null)
+            DownloadWorker.enqueue(getApplication(), info, s.format, e.title, e.artist, album)
+        }
+        _ui.update { it.copy(playlist = null, selected = emptySet(), link = "") }
+    }
+
+    fun cancelAll() { wm.cancelAllWorkByTag(DownloadWorker.TAG) }
 
     fun download() {
         val s = _ui.value

@@ -11,6 +11,24 @@ enum class DlFormat(val label: String, val hint: String) {
 /** One audio stream offered by the site. */
 data class AudioStream(val formatId: String?, val acodec: String?, val abrKbps: Int, val sampleRate: Int, val ext: String?)
 
+/** One item of a playlist, as listed before downloading. */
+data class PlEntry(
+    val index: Int,
+    val id: String,
+    val url: String,
+    val videoTitle: String,
+    val artist: String?,
+    val title: String,
+    val durationSec: Int,
+    val thumbnail: String?,
+)
+
+/** What a link turned out to be. */
+sealed class Probe {
+    data class Single(val info: DlInfo) : Probe()
+    data class Playlist(val title: String, val entries: List<PlEntry>, val total: Int) : Probe()
+}
+
 /** Pure helpers for the Downloads screen (no Android, unit-tested). */
 object YtLogic {
 
@@ -99,4 +117,83 @@ object YtLogic {
     }
 
     private fun khz(hz: Int) = if (hz % 1000 == 0) "${hz / 1000}" else String.format(Locale.US, "%.1f", hz / 1000.0)
+
+    // ---- reading yt-dlp's JSON (one object per line, from --print-to-file "video:%()j") ----
+
+    /** The video id in a YouTube link ("watch?v=ID" or "youtu.be/ID"), to preselect it in a playlist. */
+    fun videoId(url: String): String? =
+        Regex("[?&]v=([\\w-]{6,})").find(url)?.groupValues?.get(1)
+            ?: Regex("youtu\\.be/([\\w-]{6,})").find(url)?.groupValues?.get(1)
+
+    fun hasPlaylist(url: String): Boolean = Regex("[?&]list=").containsMatchIn(url)
+
+    fun parseProbe(lines: List<String>, link: String): Probe? {
+        val objs = lines.filter { it.isNotBlank() }.mapNotNull { runCatching { org.json.JSONObject(it) }.getOrNull() }
+        if (objs.isEmpty()) return null
+        val inPlaylist = objs.any { it.has("playlist_index") && !it.isNull("playlist_index") }
+        if (!inPlaylist) return Probe.Single(parseInfo(objs.first(), link))
+        val first = objs.first()
+        val entries = objs.mapIndexed { i, o ->
+            val vt = o.str("title") ?: "Item ${i + 1}"
+            val up = o.str("channel") ?: o.str("uploader")
+            val (a, t) = guessArtistTitle(vt, up)
+            val url = when {
+                o.str("_type") == "url" -> o.str("url")
+                o.str("webpage_url") != null && o.str("webpage_url") != o.str("playlist_webpage_url") && o.str("webpage_url") != link -> o.str("webpage_url")
+                else -> o.str("url")
+            } ?: o.str("webpage_url") ?: link
+            PlEntry(o.optInt("playlist_index", i + 1), o.str("id") ?: "$i", url, vt, a, t, o.optDouble("duration", 0.0).toInt(), thumbOf(o))
+        }
+        return Probe.Playlist(
+            first.str("playlist_title") ?: first.str("playlist") ?: "Playlist",
+            entries,
+            first.optInt("playlist_count", first.optInt("n_entries", entries.size)),
+        )
+    }
+
+    fun parseInfo(o: org.json.JSONObject, link: String): DlInfo {
+        val streams = mutableListOf<AudioStream>()
+        o.optJSONArray("formats")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val f = arr.optJSONObject(i) ?: continue
+                if ((f.str("vcodec") ?: "none") != "none") continue // audio-only streams
+                val abr = f.optDouble("abr", Double.NaN).takeIf { !it.isNaN() } ?: f.optDouble("tbr", 0.0)
+                streams += AudioStream(f.str("format_id"), f.str("acodec"), abr.toInt(), f.optInt("asr", 0), f.str("ext"))
+            }
+        }
+        val vt = o.str("title") ?: o.str("fulltitle") ?: link
+        val up = o.str("channel") ?: o.str("uploader")
+        val (a, t) = guessArtistTitle(vt, up)
+        return DlInfo(
+            url = o.str("webpage_url") ?: link,
+            videoTitle = vt,
+            artist = o.str("artist") ?: a,
+            title = o.str("track") ?: t,
+            uploader = up,
+            durationSec = o.optDouble("duration", 0.0).toInt(),
+            thumbnail = thumbOf(o),
+            extractor = o.str("extractor_key") ?: o.str("extractor"),
+            year = year(o.str("upload_date")),
+            best = bestAudio(streams),
+        )
+    }
+
+    private fun thumbOf(o: org.json.JSONObject): String? =
+        o.str("thumbnail") ?: o.optJSONArray("thumbnails")?.let { arr ->
+            (arr.length() - 1 downTo 0).firstNotNullOfOrNull { arr.optJSONObject(it)?.str("url") }
+        }
+
+    private fun org.json.JSONObject.str(k: String): String? = if (has(k) && !isNull(k)) optString(k).takeIf { it.isNotEmpty() } else null
+
+    /**
+     * The worker prints "extractor;acodec;abr;asr;thumbnail" for the stream yt-dlp picked
+     * (playlist items aren't measured beforehand). "NA" means unknown.
+     */
+    fun parseSourceLine(line: String): Pair<AudioStream, String?>? {
+        val p = line.trim().split(';', limit = 5)
+        if (p.size < 4) return null
+        fun v(s: String) = s.takeIf { it.isNotBlank() && it != "NA" && it != "none" }
+        val abr = v(p[2])?.toDoubleOrNull()?.toInt() ?: 0
+        return AudioStream(null, v(p[1]), abr, v(p[3])?.toDoubleOrNull()?.toInt() ?: 0, null) to (p.getOrNull(4)?.let(::v))
+    }
 }

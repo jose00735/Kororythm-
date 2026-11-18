@@ -49,10 +49,15 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val format = runCatching { DlFormat.valueOf(d.getString(K_FORMAT)!!) }.getOrDefault(DlFormat.MP3_V0)
         val title = d.getString(K_TITLE) ?: "Download"
         val artist = d.getString(K_ARTIST)
-        runCatching { setForeground(foreground(title, 0f)) }
         log("Job $id: \"$title\"${artist?.let { " by $it" } ?: ""}")
         log("Link: $url")
         log("Format: ${format.label}  ·  ${d.getString(K_QUALITY) ?: ""}")
+        if (!slots.tryAcquire()) {
+            stage("Waiting for a free slot (2 downloads at a time)", 0f)
+            log("Waiting: two downloads are already running")
+            slots.acquire()
+        }
+        runCatching { setForeground(foreground(title, 0f)) }
         val work = File(applicationContext.cacheDir, "ytdl/$processId").apply { deleteRecursively(); mkdirs() }
         try {
             stage("Starting engine", 0f)
@@ -72,6 +77,8 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 req.addOption("--embed-metadata")
             }
             req.addOption("--newline")
+            val srcFile = File(work, "source.txt")
+            req.addCommands(listOf("--print-to-file", "video:%(extractor_key)s;%(acodec)s;%(abr)s;%(asr)s;%(thumbnail)s", srcFile.absolutePath))
             req.addOption("-v") // debug info goes to stderr, shown in the log
             log("Running: yt-dlp " + req.buildCommand().joinToString(" ") { if (it.contains(' ')) "\"$it\"" else it })
             stage("Downloading", 0f)
@@ -82,7 +89,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             val resp = try { YoutubeDL.getInstance().execute(req, processId) { progress, _, line ->
                 val p = (progress / 100f).coerceIn(0f, 1f)
                 val stageName = if (line.contains("ExtractAudio") || line.contains("ffmpeg", true)) "Converting" else "Downloading"
-                setProgressAsync(workDataOf(K_STAGE to stageName, K_PROGRESS to p, K_LINE to line.take(160), K_TITLE to title))
+                setProgressAsync(workDataOf(K_STAGE to stageName, K_PROGRESS to p, K_LINE to line.take(160), K_TITLE to title, K_TIME to System.currentTimeMillis()))
                 val pct = (p * 100).toInt()
                 val isProgress = YtLogic.progressOf(line) != null
                 // every non-progress line, and progress every 5 %
@@ -97,6 +104,14 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             } } finally { watcher.cancel() }
             resp.err?.takeIf { it.isNotBlank() }?.let { log(it, "yt-dlp:err") }
             log("yt-dlp exited with code ${resp.exitCode} after ${resp.elapsedTime / 1000.0} s")
+            // Playlist items weren't measured before; take the stream yt-dlp actually picked.
+            var note = d.getString(K_NOTE)
+            var thumb = d.getString(K_THUMB)
+            runCatching { srcFile.readLines().firstOrNull() }.getOrNull()?.let(YtLogic::parseSourceLine)?.let { (stream, t) ->
+                log("Source stream: ${YtLogic.codecName(stream.acodec)} ${stream.abrKbps} kbps" + if (stream.sampleRate > 0) " · ${stream.sampleRate} Hz" else "")
+                if (note == null || note.endsWith(";0")) note = YtLogic.sourceNote(srcFile.readLines().first().substringBefore(';'), stream)
+                if (thumb == null) thumb = t
+            }
             if (resp.exitCode != 0) return@withContext Result.failure(err(lastError(resp.err)))
 
             val out = work.listFiles()?.filter { it.isFile && it.length() > 0 && it.extension.lowercase() !in setOf("part", "ytdl", "jpg", "webp", "png") }
@@ -106,9 +121,9 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             val ext = out.extension.lowercase()
             log("Output: ${out.name} (${"%.2f".format(out.length() / 1048576.0)} MB)")
             val final = if (ext == "mp3") {
-                val cover = d.getString(K_THUMB)?.let { fetchCover(it) }
+                val cover = thumb?.let { fetchCover(it) }
                 log(if (cover != null) "Cover: thumbnail cropped to a square (${cover.size / 1024} KB)" else "Cover: no thumbnail available")
-                log("Writing ID3v2.4 tags: title, artist${if (d.getString(K_ALBUM) != null) ", album" else ""}, source note ${d.getString(K_NOTE)}")
+                log("Writing ID3v2.4 tags: title, artist${if (d.getString(K_ALBUM) != null) ", album" else ""}, source note $note")
                 val tagged = File(work, "tagged.mp3")
                 TagIo.write(
                     out, tagged,
@@ -116,7 +131,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                         title = title, artist = artist, album = d.getString(K_ALBUM),
                         year = d.getInt(K_YEAR, 0).takeIf { it > 0 },
                         cover = cover?.let { Cover(it, "image/jpeg") },
-                        sourceNote = d.getString(K_NOTE),
+                        sourceNote = note,
                     ),
                 )
                 tagged
@@ -150,10 +165,11 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             }
         } finally {
             work.deleteRecursively()
+            slots.release()
         }
     }
 
-    private fun stage(name: String, p: Float) = setProgressAsync(workDataOf(K_STAGE to name, K_PROGRESS to p, K_TITLE to inputData.getString(K_TITLE)))
+    private fun stage(name: String, p: Float) = setProgressAsync(workDataOf(K_STAGE to name, K_PROGRESS to p, K_TITLE to inputData.getString(K_TITLE), K_TIME to System.currentTimeMillis()))
 
     private fun log(line: String, tag: String = "koro") = runCatching { DownloadLog.add(applicationContext, id, line, tag) }
 
@@ -203,6 +219,9 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         const val K_ALBUM = "album"; const val K_YEAR = "year"; const val K_THUMB = "thumb"; const val K_NOTE = "note"
         const val K_QUALITY = "quality"
         const val K_STAGE = "stage"; const val K_PROGRESS = "progress"; const val K_LINE = "line"
+        const val K_TIME = "time"
+        /** Two downloads at a time: each one runs its own Python + FFmpeg. */
+        private val slots = kotlinx.coroutines.sync.Semaphore(2)
         const val K_ERROR = "error"; const val K_TRACK_ID = "trackId"; const val K_SAVED_AS = "savedAs"
 
         fun enqueue(context: Context, info: DlInfo, format: DlFormat, title: String, artist: String?, album: String?): UUID {

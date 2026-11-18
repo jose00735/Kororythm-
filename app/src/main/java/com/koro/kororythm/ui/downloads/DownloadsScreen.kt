@@ -14,6 +14,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -74,6 +76,12 @@ open class DlCallbacks {
     /** Full log text of a job (LOG button). */
     open fun log(id: UUID): String = ""
     open fun copy(text: String) {}
+    open fun stop() {}
+    open fun toggle(index: Int) {}
+    open fun selectAll(all: Boolean) {}
+    open fun closePlaylist() {}
+    open fun downloadSelected() {}
+    open fun cancelAll() {}
 }
 
 @Composable
@@ -106,6 +114,15 @@ fun DownloadsScreen(vm: DownloadsViewModel, player: PlayerViewModel, onClose: ()
         override fun clearFinished() = vm.clearFinished()
         override fun updateEngine() = vm.updateEngine()
         override fun log(id: UUID) = vm.log(id)
+        override fun stop() = vm.cancelFetch()
+        override fun toggle(index: Int) = vm.toggle(index)
+        override fun selectAll(all: Boolean) = vm.selectAll(all)
+        override fun closePlaylist() = vm.closePlaylist()
+        override fun downloadSelected() {
+            if (Build.VERSION.SDK_INT >= 33) notify.launch(Manifest.permission.POST_NOTIFICATIONS)
+            vm.downloadSelected()
+        }
+        override fun cancelAll() = vm.cancelAll()
         override fun copy(text: String) {
             val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             cm.setPrimaryClip(android.content.ClipData.newPlainText("Kororythm download log", text))
@@ -116,27 +133,41 @@ fun DownloadsScreen(vm: DownloadsViewModel, player: PlayerViewModel, onClose: ()
 }
 
 @Composable
-fun DownloadsContent(ui: DlUi, cb: DlCallbacks) {
+fun DownloadsContent(ui: DlUi, cb: DlCallbacks, frozenNow: Long? = null) {
+    // A clock for "no output for N s" and the elapsed time.
+    val now by androidx.compose.runtime.produceState(frozenNow ?: System.currentTimeMillis()) {
+        if (frozenNow != null) return@produceState
+        while (true) { value = System.currentTimeMillis(); kotlinx.coroutines.delay(1000) }
+    }
     NeonScreen(title = "DOWNLOADS", onBack = cb::close) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Card("LINK") {
                 NeonTextField(ui.link, cb::link, placeholder = "https://youtu.be/…")
                 Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     NeonButton("PASTE", cb::paste)
-                    NeonButton(if (ui.fetching) "READING…" else "FETCH ▸", cb::fetch, active = ui.fetching, accent = Neon.Orange)
+                    if (ui.fetching) NeonButton("■ STOP", cb::stop, active = true, accent = Neon.Orange)
+                    else NeonButton("FETCH ▸", cb::fetch, accent = Neon.Orange)
                     Spacer(Modifier.weight(1f))
                     NeonText("or share from YouTube", size = 9.sp, color = Neon.Dim, glow = null)
                 }
                 if (ui.fetching) {
                     Spacer(Modifier.height(8.dp))
                     Scanline()
+                    val elapsed = ((now - ui.fetchStarted) / 1000).coerceAtLeast(0)
+                    val quiet = ((now - ui.lastOutput) / 1000).coerceAtLeast(0)
                     NeonText(
-                        if (ui.firstRun) "Unpacking the download engine (first time only)…" else "Reading the link…",
+                        (if (ui.firstRun && ui.fetchLines.isEmpty()) "Unpacking the download engine (first time only)" else "Reading the link") + " · ${elapsed} s",
                         Modifier.padding(top = 4.dp), size = 10.sp, color = Neon.Dim, glow = null,
                     )
+                    if (quiet >= 20) {
+                        NeonText("No output for $quiet s; it may be stuck. Tap ■ STOP to abort.", size = 10.sp, color = Neon.Orange, glow = null, maxLines = 2)
+                    }
+                    if (ui.fetchLines.isNotEmpty()) Terminal(ui.fetchLines.takeLast(7), Modifier.padding(top = 6.dp))
                 }
                 ui.error?.let { NeonText(it, Modifier.padding(top = 8.dp), size = 11.sp, color = Neon.Orange, glow = null, maxLines = 3) }
             }
+
+            ui.playlist?.let { pl -> PlaylistPicker(pl, ui, cb) }
 
             ui.info?.let { info ->
                 Card("TRACK") {
@@ -180,7 +211,14 @@ fun DownloadsContent(ui: DlUi, cb: DlCallbacks) {
                 if (ui.jobs.isEmpty()) {
                     NeonText("Nothing yet. Downloads land in ${MusicStore.FOLDER} and in your library.", size = 11.sp, color = Neon.Dim, glow = null, maxLines = 2)
                 }
-                ui.jobs.forEach { j -> JobRow(j, cb, logOpen = j.id == ui.logOpen) }
+                val active = ui.jobs.count { it.state == JobState.RUNNING || it.state == JobState.QUEUED }
+                if (active >= 2) {
+                    Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        NeonText("$active downloads in progress · 2 at a time", Modifier.weight(1f), size = 10.sp, color = Neon.Dim, glow = null)
+                        NeonButton("CANCEL ALL", cb::cancelAll)
+                    }
+                }
+                ui.jobs.forEach { j -> JobRow(j, cb, logOpen = j.id == ui.logOpen, now = now) }
                 if (ui.jobs.any { it.state == JobState.DONE || it.state == JobState.FAILED }) {
                     NeonButton("CLEAR FINISHED", cb::clearFinished, Modifier.padding(top = 6.dp))
                 }
@@ -200,7 +238,7 @@ fun DownloadsContent(ui: DlUi, cb: DlCallbacks) {
 }
 
 @Composable
-private fun JobRow(j: DlJob, cb: DlCallbacks, logOpen: Boolean = false) {
+private fun JobRow(j: DlJob, cb: DlCallbacks, logOpen: Boolean = false, now: Long = 0) {
     var showLog by androidx.compose.runtime.saveable.rememberSaveable(j.id.toString()) { androidx.compose.runtime.mutableStateOf(logOpen) }
     Column(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -209,7 +247,8 @@ private fun JobRow(j: DlJob, cb: DlCallbacks, logOpen: Boolean = false) {
                 val line = when (j.state) {
                     JobState.DONE -> "✓ ${j.savedAs ?: "Saved"}"
                     JobState.FAILED -> "✕ ${j.error}"
-                    JobState.RUNNING -> j.stage + if (j.progress in 0.001f..0.999f) " · ${(j.progress * 100).toInt()}%" else ""
+                    JobState.RUNNING -> j.stage + (if (j.progress in 0.001f..0.999f) " · ${(j.progress * 100).toInt()}%" else "") +
+                        (((now - j.lastActivity) / 1000).takeIf { j.lastActivity > 0 && it >= 30 && !j.stage.startsWith("Waiting") }?.let { " · no output for $it s, may be stuck" } ?: "")
                     JobState.QUEUED -> "Waiting…"
                 }
                 NeonText(
@@ -320,5 +359,77 @@ private fun Card(title: String, content: @Composable ColumnScope.() -> Unit) {
         NeonText(title, size = 9.sp, color = Neon.Dim, glow = null, spacing = 2.sp)
         Spacer(Modifier.height(8.dp))
         content()
+    }
+}
+
+/** Last lines of yt-dlp's output, terminal style. */
+@Composable
+private fun Terminal(lines: List<String>, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth().background(TermBg, RoundedCornerShape(6.dp)).padding(6.dp)) {
+        lines.forEach { line ->
+            val color = when {
+                line.contains("ERROR") -> TermErr
+                line.contains("WARNING") -> TermWarn
+                line.startsWith("yt-dlp ") || line.contains("[debug]") -> TermDim
+                else -> TermText
+            }
+            androidx.compose.material3.Text(
+                line, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                style = Neon.style(9.sp, color, null, spacing = 0.sp).copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+            )
+        }
+    }
+}
+
+/** A playlist link: tick the items to download. */
+@Composable
+private fun PlaylistPicker(pl: com.koro.kororythm.downloads.Probe.Playlist, ui: DlUi, cb: DlCallbacks) {
+    Card("PLAYLIST") {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                NeonText(pl.title, size = 13.sp, weight = FontWeight.Bold, maxLines = 2)
+                NeonText(
+                    "${pl.entries.size} items" + (if (pl.total > pl.entries.size) " (first ${pl.entries.size} of ${pl.total})" else "") + " · ${ui.selected.size} selected",
+                    size = 10.sp, color = Neon.Dim, glow = null,
+                )
+            }
+            NeonText("✕", Modifier.clickable(onClick = cb::closePlaylist).padding(6.dp), size = 15.sp, color = Neon.Dim, glow = null)
+        }
+        Row(Modifier.padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            NeonButton("ALL", { cb.selectAll(true) }, active = ui.selected.size == pl.entries.size)
+            NeonButton("NONE", { cb.selectAll(false) }, active = ui.selected.isEmpty())
+        }
+        Column(
+            Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState())
+                .background(Neon.Bg.copy(alpha = 0.35f), RoundedCornerShape(6.dp)),
+        ) {
+            pl.entries.forEach { e ->
+                val on = e.index in ui.selected
+                Row(
+                    Modifier.fillMaxWidth().clickable { cb.toggle(e.index) }.padding(horizontal = 6.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    com.koro.kororythm.ui.common.NeonCheck(on)
+                    Spacer(Modifier.width(8.dp))
+                    NeonText("${e.index}.", Modifier.width(30.dp), size = 10.sp, color = Neon.Dim, glow = null)
+                    Column(Modifier.weight(1f)) {
+                        NeonText(e.title, size = 12.sp, color = if (on) Neon.Ink else Neon.Dim, glow = null)
+                        e.artist?.let { NeonText(it, size = 9.sp, color = Neon.Dim, glow = null) }
+                    }
+                    if (e.durationSec > 0) NeonText(formatTime(e.durationSec * 1000L), size = 10.sp, color = Neon.Dim, glow = null)
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        NeonTextField(ui.album, cb::album, label = "ALBUM FOR ALL (OPTIONAL)", placeholder = pl.title)
+        Spacer(Modifier.height(8.dp))
+        DlFormat.entries.forEach { f ->
+            ChoiceCard(f.label, f.hint, Modifier.padding(bottom = 6.dp), selected = ui.format == f, onClick = { cb.format(f) })
+        }
+        Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            NeonButton("DOWNLOAD ${ui.selected.size} ▸", cb::downloadSelected, accent = Neon.Orange, active = ui.selected.isNotEmpty())
+            Spacer(Modifier.width(10.dp))
+            NeonText("to ${MusicStore.FOLDER}", size = 10.sp, color = Neon.Dim, glow = null)
+        }
     }
 }
