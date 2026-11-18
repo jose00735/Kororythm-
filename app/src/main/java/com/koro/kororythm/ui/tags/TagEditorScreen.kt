@@ -56,7 +56,11 @@ open class TagEditCallbacks {
 }
 
 @Composable
-fun TagEditorScreen(vm: TagEditViewModel, player: PlayerActions, onClose: () -> Unit) {
+/**
+ * [next] / [progress] are set while fixing a list of badly tagged songs one by one
+ * ("FIX ONE BY ONE" in Library ▸ NEEDS TAGS).
+ */
+fun TagEditorScreen(vm: TagEditViewModel, player: PlayerActions, onClose: () -> Unit, next: (() -> Unit)? = null, progress: String? = null) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(vm::setCoverFrom) }
     // Android's "Allow Kororythm to modify this file?" dialog; on yes, save again.
@@ -80,17 +84,20 @@ fun TagEditorScreen(vm: TagEditViewModel, player: PlayerActions, onClose: () -> 
             override fun save() = vm.save(player)
         }
     }
-    TagEditorContent(ui, cb)
+    TagEditorContent(ui, cb, next, progress)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun TagEditorContent(ui: TagEditUi, cb: TagEditCallbacks) {
+fun TagEditorContent(ui: TagEditUi, cb: TagEditCallbacks, next: (() -> Unit)? = null, progress: String? = null) {
     NeonScreen(
-        title = "EDIT TAGS",
+        title = progress?.let { "FIX $it" } ?: "EDIT TAGS",
         onBack = cb::close,
         backLabel = "✕ CLOSE",
-        actions = { NeonButton(if (ui.saved) "SAVED ✓" else "SAVE TO FILE", cb::save, active = !ui.saved, accent = Neon.Orange) },
+        actions = {
+            NeonButton(if (ui.saved) "SAVED ✓" else if (next != null) "SAVE" else "SAVE TO FILE", cb::save, active = !ui.saved, accent = Neon.Orange)
+            next?.let { NeonButton(if (ui.saved) "NEXT ▸" else "SKIP ▸", it, active = ui.saved) }
+        },
     ) {
         val f = ui.form
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {

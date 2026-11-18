@@ -46,7 +46,24 @@ data class TrackEntity(
     /** Volume-levelling gain in dB from the loudness analysis. */
     val gainDb: Float? = null,
     @ColumnInfo(defaultValue = "0") val analyzed: Boolean = false,
+    /** Broad genre ("Electronic"), from the file's genre and/or the online lookup (v4). */
+    val genreMain: String? = null,
+    /** Finer genre ("Synthwave"), when known. */
+    val subGenre: String? = null,
+    /** When the genre lookup last ran for this track (0 = not yet). */
+    @ColumnInfo(defaultValue = "0") val genreChecked: Long = 0,
 ) {
+    /** Which tag fields are missing, for the NEEDS TAGS list. */
+    val missing: List<String>
+        get() = buildList {
+            if (tagsMissing && artist != null && album != null) add("title")
+            if (artist.isNullOrBlank()) add("artist")
+            if (album.isNullOrBlank()) add("album")
+            if (year == null) add("year")
+            if (genre.isNullOrBlank() && genreMain == null) add("genre")
+            if (artPath == null) add("cover")
+        }
+
     fun toTrackInfo() = TrackInfo(uri, title, artist, album, durationMs, bitrateKbps, sampleRate, bits, codec)
 }
 
@@ -155,6 +172,8 @@ data class UserAlbumSummary(
     val trackCount: Int,
     val durationMs: Long,
 )
+
+data class GenreCount(val genreMain: String?, val subGenre: String?, val count: Int)
 
 data class PlaylistSummary(
     val id: Long,

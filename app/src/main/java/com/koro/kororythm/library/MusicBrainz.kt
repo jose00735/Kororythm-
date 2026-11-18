@@ -18,9 +18,13 @@ object MusicBrainz {
 
     data class Suggestion(val title: String, val artist: String?, val album: String?, val year: Int?, val score: Int)
 
-    private const val USER_AGENT = "Kororythm/0.2 ( https://github.com/jose00735/Kororythm- )"
+    private const val USER_AGENT = "Kororythm/1.2 ( https://github.com/jose00735/Kororythm- )"
     private val gate = Mutex()
     private var lastCall = 0L
+
+    /** The last [get] failed for network reasons (offline, timeout, rate limit), not "not found". */
+    @Volatile var lastFailed = false
+        private set
 
     /** Builds a Lucene query: recording:"title" AND artist:"artist". */
     fun buildQuery(title: String, artist: String?): String {
@@ -49,6 +53,33 @@ object MusicBrainz {
             conn.readTimeout = 10_000
             if (conn.responseCode != 200) return@withContext emptyList()
             parse(conn.inputStream.bufferedReader().use { it.readText() })
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    /** GET a MusicBrainz web-service path ("recording/?query=…"), one request per second; null on errors. */
+    suspend fun get(pathAndQuery: String): String? = withContext(Dispatchers.IO) {
+        gate.withLock {
+            val wait = 1100 - (System.currentTimeMillis() - lastCall)
+            if (wait > 0) delay(wait)
+            lastCall = System.currentTimeMillis()
+        }
+        val sep = if (pathAndQuery.contains('?')) '&' else '?'
+        val conn = URL("https://musicbrainz.org/ws/2/$pathAndQuery${sep}fmt=json").openConnection() as HttpURLConnection
+        try {
+            conn.setRequestProperty("User-Agent", USER_AGENT)
+            conn.setRequestProperty("Accept", "application/json")
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 15_000
+            when (conn.responseCode) {
+                200 -> { lastFailed = false; conn.inputStream.bufferedReader().use { it.readText() } }
+                503 -> { lastFailed = true; delay(3000); null } // rate-limited: back off
+                else -> { lastFailed = false; null } // e.g. 404: nothing there
+            }
+        } catch (e: java.io.IOException) {
+            lastFailed = true
+            null
         } finally {
             conn.disconnect()
         }

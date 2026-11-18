@@ -19,7 +19,15 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-enum class LibTab(val label: String) { TRACKS("TRACKS"), ALBUMS("ALBUMS"), ARTISTS("ARTISTS"), PLAYLISTS("PLAYLISTS"), MINE("MY ALBUMS") }
+enum class LibTab(val label: String) {
+    TRACKS("TRACKS"), ALBUMS("ALBUMS"), ARTISTS("ARTISTS"), GENRES("GENRES"), PLAYLISTS("PLAYLISTS"), MINE("MY ALBUMS"), NEEDS("⚑ NEEDS TAGS"),
+}
+
+/** A broad genre with its sub-genres (null = no finer genre known). */
+data class GenreGroup(val main: String?, val count: Int, val subs: List<Pair<String?, Int>>)
+
+/** State of the background genre lookup. */
+data class GenreScan(val running: Boolean = false, val done: Int = 0, val found: Int = 0, val left: Int = 0, val current: String? = null)
 
 /** A name to type: a new playlist (with the tracks to put in it) or a rename. */
 data class NamePrompt(val title: String, val initial: String, val newWith: List<Long>? = null, val renameId: Long? = null)
@@ -53,6 +61,9 @@ data class LibraryUi(
     val addTo: List<Long>? = null,
     val prompt: NamePrompt? = null,
     val toast: String? = null,
+    val needs: List<TrackEntity> = emptyList(),
+    val genres: List<GenreGroup> = emptyList(),
+    val genreScan: GenreScan = GenreScan(),
 )
 
 class LibraryViewModel(app: Application) : AndroidViewModel(app) {
@@ -74,17 +85,58 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     private val lists = combine(dao.playlists(), query) { list, q -> list.filter { matches(q, it.name) } }
     private val overlay = MutableStateFlow(LibraryUi())
 
+    private val genreGroups = combine(dao.genreCounts(), query) { rows, q ->
+        rows.groupBy { it.genreMain }.map { (main, l) ->
+            GenreGroup(main, l.sumOf { it.count }, l.map { it.subGenre to it.count }.sortedByDescending { it.second })
+        }.filter { g -> matches(q, g.main) || g.subs.any { matches(q, it.first) } }
+            .sortedWith(compareBy<GenreGroup> { it.main == null }.thenByDescending { it.count })
+    }
+    private val genreWork = androidx.work.WorkManager.getInstance(app)
+        .getWorkInfosForUniqueWorkFlow(com.koro.kororythm.genres.GenreWorker.UNIQUE)
+    private val scan = combine(genreWork, dao.genreUncheckedCount()) { infos, left ->
+        val w = infos.lastOrNull { !it.state.isFinished }
+        GenreScan(
+            running = w != null,
+            done = w?.progress?.getInt(com.koro.kororythm.genres.GenreWorker.K_DONE, 0) ?: 0,
+            found = w?.progress?.getInt(com.koro.kororythm.genres.GenreWorker.K_FOUND, 0) ?: 0,
+            left = left,
+            current = w?.progress?.getString(com.koro.kororythm.genres.GenreWorker.K_CURRENT),
+        )
+    }
+    private val extras = combine(dao.needsTags(), genreGroups, scan) { n, g, sc -> Triple(n, g, sc) }
+
     val ui: StateFlow<LibraryUi> = combine(
         combine(tab, query, dao.count(), detail, overlay) { t, q, c, d, o ->
             o.copy(tab = t, query = q, count = c, detail = d)
         },
-        tracks, albums, artists, combine(mine, lists) { a, b -> a to b },
-    ) { base, tr, al, ar, ml -> base.copy(tracks = tr, albums = al, artists = ar, mine = ml.first, playlists = ml.second) }
+        tracks, albums, artists, combine(mine, lists, extras) { a, b, c -> Triple(a, b, c) },
+    ) { base, tr, al, ar, ml ->
+        base.copy(
+            tracks = tr, albums = al, artists = ar, mine = ml.first, playlists = ml.second,
+            needs = ml.third.first, genres = ml.third.second, genreScan = ml.third.third,
+        )
+    }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LibraryUi())
 
     private fun ov(f: (LibraryUi) -> LibraryUi) { overlay.value = f(overlay.value) }
 
     fun toggleCoverFlow() = ov { it.copy(coverFlow = !it.coverFlow) }
+
+    // ---- genres ----
+    fun openGenre(main: String?) = viewModelScope.launch {
+        val list = dao.genreTracks(main)
+        detail.value = LibDetail(main ?: "Unknown genre", "${list.size} tracks · genre", null, null, list)
+    }
+
+    fun openSubGenre(main: String?, sub: String?) = viewModelScope.launch {
+        val list = dao.subGenreTracks(main, sub)
+        detail.value = LibDetail(sub ?: "Other ${main ?: ""}".trim(), "${main ?: "Unknown"} · ${list.size} tracks", null, null, list)
+    }
+
+    fun findGenres() = com.koro.kororythm.genres.GenreWorker.runNow(getApplication())
+
+    /** Looks every song up again (e.g. after the genre rules improved). */
+    fun recheckGenres() = viewModelScope.launch { dao.recheckAllGenres(); findGenres() }
     fun openMenu(t: TrackEntity?) = ov { it.copy(menu = t) }
     fun toastShown() = ov { it.copy(toast = null) }
 

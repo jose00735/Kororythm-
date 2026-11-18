@@ -151,6 +151,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             }
             log(track?.let { "Library track #${it.id}: ${it.codec} ${it.bitrateKbps ?: "?"} kbps, ${it.durationMs / 1000} s" } ?: "Saved, but the library couldn't read it yet (it'll show up on the next scan)")
             com.koro.kororythm.dj.AnalysisWorker.runNow(applicationContext)
+            com.koro.kororythm.genres.GenreWorker.runNow(applicationContext)
             log("Done ✓")
             Result.success(
                 workDataOf(K_TRACK_ID to (track?.id ?: -1L), K_SAVED_AS to "${MusicStore.FOLDER}/$name", K_TITLE to title),

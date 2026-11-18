@@ -146,7 +146,18 @@ class Scanner(private val context: Context, private val dao: LibraryDao) {
         return keyLock.withLock {
             val twin = dao.byContentKey(key)
             when {
-                existing != null -> { dao.update(entity.copy(id = existing.id)); ScanResult(updated = 1) }
+                existing != null -> {
+                    // Keep what was worked out for this track; look the genre up again if the file's genre changed.
+                    val sameGenre = existing.genre == entity.genre
+                    dao.update(
+                        entity.copy(
+                            id = existing.id, bpm = existing.bpm, gainDb = existing.gainDb, analyzed = existing.analyzed,
+                            genreMain = if (sameGenre) existing.genreMain else null, subGenre = if (sameGenre) existing.subGenre else null,
+                            genreChecked = if (sameGenre) existing.genreChecked else 0,
+                        ),
+                    )
+                    ScanResult(updated = 1)
+                }
                 twin != null && twin.uri != uriStr -> ScanResult(duplicates = 1)
                 dao.insert(entity) > 0 -> ScanResult(added = 1)
                 else -> ScanResult(unchanged = 1)

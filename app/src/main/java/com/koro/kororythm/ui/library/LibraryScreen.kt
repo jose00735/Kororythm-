@@ -81,6 +81,12 @@ open class LibraryCallbacks {
     open fun promptDone(name: String) {}
     open fun cancelPrompt() {}
     open fun coverFlow() {}
+    open fun openGenre(main: String?) {}
+    open fun openSubGenre(main: String?, sub: String?) {}
+    open fun findGenres() {}
+    open fun recheckGenres() {}
+    /** Opens the tag editor on each of these songs in turn. */
+    open fun fixAll(tracks: List<TrackEntity>) {}
 }
 
 @Composable
@@ -95,6 +101,7 @@ fun LibraryScreen(
     onDownloads: () -> Unit = {},
     onUpgrade: (TrackEntity) -> Unit = {},
     onLyrics: (TrackEntity) -> Unit = {},
+    onFixAll: (List<String>) -> Unit = {},
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     BackHandler { if (ui.detail != null) vm.closeDetail() else onBack() }
@@ -131,6 +138,11 @@ fun LibraryScreen(
         override fun promptDone(name: String) { vm.promptDone(name) }
         override fun cancelPrompt() = vm.cancelPrompt()
         override fun coverFlow() = vm.toggleCoverFlow()
+        override fun openGenre(main: String?) { vm.openGenre(main) }
+        override fun openSubGenre(main: String?, sub: String?) { vm.openSubGenre(main, sub) }
+        override fun findGenres() = vm.findGenres()
+        override fun recheckGenres() { vm.recheckGenres() }
+        override fun fixAll(tracks: List<TrackEntity>) = onFixAll(tracks.map { it.uri })
     }
     val context = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.runtime.LaunchedEffect(ui.toast) {
@@ -172,7 +184,21 @@ private fun LibraryPage(ui: LibraryUi, cb: LibraryCallbacks, nowPlayingUri: Stri
         }
         NeonTextField(ui.query, cb::query, Modifier.fillMaxWidth(), placeholder = "Search ${ui.count} tracks, albums, artists")
         Spacer(Modifier.height(8.dp))
-        NeonTabs(LibTab.entries.map { it.label }, ui.tab.ordinal, { cb.tab(LibTab.entries[it]) })
+        NeonTabs(
+            LibTab.entries.map { if (it == LibTab.NEEDS) "⚑ NEEDS TAGS · ${ui.needs.size}" else it.label },
+            ui.tab.ordinal, { cb.tab(LibTab.entries[it]) },
+        )
+        if (ui.needs.isNotEmpty() && ui.tab != LibTab.NEEDS) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 6.dp)
+                    .background(Neon.Orange.copy(alpha = 0.10f), RoundedCornerShape(6.dp))
+                    .clickable { cb.tab(LibTab.NEEDS) }.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                NeonText("⚑ ${ui.needs.size} songs have thin tags", Modifier.weight(1f), size = 11.sp, color = Neon.Orange, glow = null)
+                NeonText("FIX ▸", size = 11.sp, color = Neon.Orange, glow = null, weight = FontWeight.Bold)
+            }
+        }
         Spacer(Modifier.height(8.dp))
         Box(
             Modifier.fillMaxWidth().weight(1f).background(Neon.Panel, RoundedCornerShape(10.dp)).neonBorder(Neon.Cyan, 10.dp, 0.7f).padding(6.dp),
@@ -191,6 +217,8 @@ private fun LibraryPage(ui: LibraryUi, cb: LibraryCallbacks, nowPlayingUri: Stri
                     }
                 }
                 LibTab.PLAYLISTS -> PlaylistList(ui.playlists, cb, ui.coverFlow)
+                LibTab.GENRES -> GenreList(ui, cb)
+                LibTab.NEEDS -> NeedsList(ui, cb, nowPlayingUri)
                 LibTab.ARTISTS -> ArtistList(ui.artists, cb)
                 LibTab.MINE -> if (ui.mine.isEmpty()) {
                     Hint("No albums of your own yet.\nTap + ALBUM to compile one from your tracks.")

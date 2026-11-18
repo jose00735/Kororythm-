@@ -28,7 +28,10 @@ class ImportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             setProgress(workDataOf(K_FOUND to p.found, K_PROCESSED to p.processed, K_CURRENT to p.current))
         }
         // New tracks get their BPM and loudness measured in the background.
-        if (result.added + result.updated > 0) com.koro.kororythm.dj.AnalysisWorker.runNow(applicationContext)
+        if (result.added + result.updated > 0) {
+            com.koro.kororythm.dj.AnalysisWorker.runNow(applicationContext)
+            com.koro.kororythm.genres.GenreWorker.runNow(applicationContext)
+        }
         return Result.success(toData(result))
     }
 

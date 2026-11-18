@@ -120,7 +120,7 @@ fun TrackMenu(t: TrackEntity, cb: LibraryCallbacks) {
             Column(Modifier.weight(1f)) {
                 NeonText(t.title, size = 14.sp, weight = FontWeight.Bold)
                 NeonText(
-                    listOfNotNull(t.artist, t.codec, t.bitrateKbps?.let { "$it kbps" }, t.bits?.let { "$it-bit" }).joinToString(" · "),
+                    listOfNotNull(t.artist, t.subGenre ?: t.genreMain ?: t.genre, t.codec, t.bitrateKbps?.let { "$it kbps" }, t.bits?.let { "$it-bit" }).joinToString(" · "),
                     size = 10.sp, color = Neon.Dim, glow = null,
                 )
             }

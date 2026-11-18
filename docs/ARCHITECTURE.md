@@ -260,3 +260,12 @@ What was built, and where it differs from the plan above.
 | Packaging | ABI splits (arm64-v8a, armeabi-v7a); R8 keeps `com.yausername.**` and Jackson-annotated members |
 | License | GPL-3.0 for the app (required by youtubedl-android); see `NOTICE.md` |
 
+## v1.2 implementation notes
+
+| Area | As built |
+| --- | --- |
+| Database | Room v4 adds `genreMain`, `subGenre`, `genreChecked` to `tracks` (ALTER TABLE migration, checked against the schema). Rescans keep analysis and genre unless the file's genre changed |
+| Needs tags | One SQL "badness" score (artist/album/file-name title = 2, year/genre/cover = 1); listed when ≥ 2 |
+| Genre lookup | `GenreWorker` (WorkManager, network required, unique + append): MusicBrainz recording search → tags (weight 3), release group genres (2, cached per album), artist genres (1, cached per artist); iTunes `primaryGenreName` if nothing mapped; the file's genre weighs 6. Network failures return `retry()` so songs aren't marked "no genre" while offline |
+| Taxonomy | `GenreMap`: ordered regex rules map any genre name to one of 16 families; the family with the most weight wins, and its strongest non-generic name becomes the sub-genre. Pure and unit-tested |
+

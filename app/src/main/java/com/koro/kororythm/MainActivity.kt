@@ -75,8 +75,11 @@ class MainActivity : ComponentActivity() {
             var tagsReturn by rememberSaveable { mutableStateOf(Screen.PLAYER) }
             val playerState by vm.state.collectAsStateWithLifecycle()
             val openTags: (String) -> Unit = { uri -> tagVm.load(uri); tagsReturn = screen; screen = Screen.TAGS }
+            // "FIX ONE BY ONE": the tag editor walks through these songs with NEXT.
+            var fixQueue by rememberSaveable { mutableStateOf(emptyList<String>()) }
+            var fixPos by rememberSaveable { mutableStateOf(0) }
+            BackHandler(enabled = screen == Screen.TAGS) { fixQueue = emptyList(); screen = tagsReturn }
             BackHandler(enabled = screen == Screen.IMPORT || screen == Screen.ALBUM) { screen = Screen.LIBRARY }
-            BackHandler(enabled = screen == Screen.TAGS) { screen = tagsReturn }
             BackHandler(enabled = screen == Screen.DJ) { screen = Screen.PLAYER }
             var downloadsReturn by rememberSaveable { mutableStateOf(Screen.PLAYER) }
             BackHandler(enabled = screen == Screen.DOWNLOADS) { screen = downloadsReturn }
@@ -115,6 +118,7 @@ class MainActivity : ComponentActivity() {
                             onNewAlbum = { albumVm.startOver(); screen = Screen.ALBUM },
                             onEditTags = openTags,
                             onDownloads = openDownloads,
+                        onFixAll = { uris -> if (uris.isNotEmpty()) { fixQueue = uris; fixPos = 0; openTags(uris[0]) } },
                             onUpgrade = { t -> upgradeVm.start(t) },
                             onLyrics = { t -> openLyrics(if (t.uri == playerState.current?.uri) null else t.toTrackInfo()) },
                         )
@@ -123,7 +127,14 @@ class MainActivity : ComponentActivity() {
                             onClose = { screen = Screen.LIBRARY },
                             onOpenLibrary = { screen = Screen.LIBRARY },
                         )
-                        Screen.TAGS -> TagEditorScreen(tagVm, vm, onClose = { screen = tagsReturn })
+                        Screen.TAGS -> TagEditorScreen(
+                            tagVm, vm,
+                            onClose = { fixQueue = emptyList(); screen = tagsReturn },
+                            next = if (fixQueue.isEmpty()) null else ({
+                                if (fixPos + 1 < fixQueue.size) { fixPos++; tagVm.load(fixQueue[fixPos]) } else { fixQueue = emptyList(); screen = tagsReturn }
+                            }),
+                            progress = if (fixQueue.isEmpty()) null else "${fixPos + 1}/${fixQueue.size}",
+                        )
                         Screen.DJ -> DjScreen(djVm, vm, onClose = { screen = Screen.PLAYER })
                         Screen.DOWNLOADS -> DownloadsScreen(downloadsVm, vm, onClose = { screen = downloadsReturn })
                         Screen.ALBUM -> AlbumWizardScreen(

@@ -74,7 +74,11 @@ class TagEditViewModel(app: Application) : AndroidViewModel(app) {
             val app = getApplication<Application>()
             val uri = Uri.parse(uriString)
             val name = FileAccess.displayName(app, uri) ?: uri.lastPathSegment ?: "track"
-            val (form, cover) = withContext(Dispatchers.IO) { readTags(uri) }
+            val (read, cover) = withContext(Dispatchers.IO) { readTags(uri) }
+            // No genre in the file: offer the one the genre lookup found (saved into the file on SAVE).
+            val known = Library.dao.byUri(uriString)
+            val suggested = known?.subGenre ?: known?.genreMain
+            val form = if (read.genre.isBlank() && suggested != null) read.copy(genre = suggested) else read
             val base = name.substringBeforeLast('.')
             _ui.update {
                 it.copy(
@@ -282,8 +286,17 @@ class TagEditViewModel(app: Application) : AndroidViewModel(app) {
                     contentKey = key,
                     artPath = art,
                     tagsMissing = TagRules.tagsMissing(f.title, f.artist, f.album),
-                ),
+                ).let { upd ->
+                    // New artist / title / genre: work the genre out again.
+                    if (upd.artist != row.artist || upd.title != row.title || upd.genre != row.genre) {
+                        val local = com.koro.kororythm.genres.GenreMap.classify(
+                            upd.genre?.split(';', '/', ',')?.map { com.koro.kororythm.genres.Vote(it.trim(), 6.0) }.orEmpty(),
+                        )
+                        upd.copy(genreMain = local.first ?: upd.genreMain, subGenre = local.second ?: upd.subGenre, genreChecked = 0)
+                    } else upd
+                },
             )
+            com.koro.kororythm.genres.GenreWorker.runNow(app)
             return dao.byUri(newUri)!!.toTrackInfo()
         }
         return withContext(Dispatchers.IO) { TrackInfo.read(app, Uri.parse(newUri)) }

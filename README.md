@@ -17,7 +17,20 @@ An Android music player for FLAC and MP3 with a classic Winamp layout, two skins
 
 Built with Kotlin, Jetpack Compose and AndroidX Media3. Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## New in v1.1
+## New in v1.2
+
+**⚑ Needs tags** (Library tab, plus an orange banner when there are any)
+- Lists songs with thin metadata (title from the file name, no artist or album, or two of year / genre / cover missing), worst first, each with "no artist", "no year"… chips
+- **FIX ONE BY ONE** walks the tag editor through them: SAVE, then NEXT ▸ (or SKIP ▸), with "FIX 3/17" in the title
+
+**Genres and sub-genres**
+- A background lookup fills in a broad genre and a finer sub-genre for every song: the file's own genre, MusicBrainz tags of the recording, genres of its album and artist (each asked once), and iTunes' genre as a fallback; one request per second, as MusicBrainz asks
+- It runs after imports, downloads and tag edits, and from **FIND GENRES**; offline it waits and tries again instead of giving up
+- Sub-genres are sorted into 16 families (Electronic ▸ Synthwave, Latin ▸ Vallenato / Champeta / Reggaeton, Rock ▸ Post-Punk…)
+- **GENRES** tab: each family with its count and sub-genre chips; tap either to list (and play / cover-flow) those songs
+- The tag editor offers the found genre for files that have none, so SAVE writes it into the file
+
+
 
 **Downloads** (⇩ GET in the library, or share a link from YouTube to Kororythm)
 - Embedded **yt-dlp** with Python and FFmpeg ([youtubedl-android](https://github.com/JunkFood02/youtubedl-android)); works with YouTube, YouTube Music and the other sites yt-dlp supports

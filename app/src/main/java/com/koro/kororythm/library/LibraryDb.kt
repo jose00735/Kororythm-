@@ -45,6 +45,35 @@ abstract class LibraryDao {
     @Query("SELECT * FROM tracks WHERE tagsMissing = 1 ORDER BY title COLLATE NOCASE")
     abstract fun missingTags(): Flow<List<TrackEntity>>
 
+    /**
+     * Poorly tagged tracks: a title taken from the file name, no artist or album, or at least
+     * two of year / genre / cover missing. Worst first.
+     */
+    @Query("SELECT * FROM tracks WHERE $BADNESS >= 2 ORDER BY $BADNESS DESC, title COLLATE NOCASE")
+    abstract fun needsTags(): Flow<List<TrackEntity>>
+
+    // ---- genres (v4) ----
+    @Query("SELECT genreMain, subGenre, COUNT(*) AS count FROM tracks GROUP BY genreMain, subGenre ORDER BY genreMain COLLATE NOCASE, count DESC")
+    abstract fun genreCounts(): Flow<List<GenreCount>>
+
+    @Query("SELECT * FROM tracks WHERE genreMain IS :main ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE, trackNo")
+    abstract suspend fun genreTracks(main: String?): List<TrackEntity>
+
+    @Query("SELECT * FROM tracks WHERE genreMain IS :main AND subGenre IS :sub ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE, trackNo")
+    abstract suspend fun subGenreTracks(main: String?, sub: String?): List<TrackEntity>
+
+    @Query("SELECT * FROM tracks WHERE genreChecked = 0 ORDER BY artist, album LIMIT :limit")
+    abstract suspend fun genreUnchecked(limit: Int): List<TrackEntity>
+
+    @Query("SELECT COUNT(*) FROM tracks WHERE genreChecked = 0")
+    abstract fun genreUncheckedCount(): Flow<Int>
+
+    @Query("UPDATE tracks SET genreMain = :main, subGenre = :sub, genreChecked = :at WHERE id = :id")
+    abstract suspend fun setGenre(id: Long, main: String?, sub: String?, at: Long)
+
+    @Query("UPDATE tracks SET genreChecked = 0")
+    abstract suspend fun recheckAllGenres()
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     abstract suspend fun insert(t: TrackEntity): Long
 
@@ -228,7 +257,7 @@ abstract class LibraryDao {
         TrackEntity::class, TrackFts::class, UserAlbumEntity::class, UserAlbumTrack::class, SourceEntity::class, HotCue::class,
         PlaylistEntity::class, PlaylistTrack::class, LyricsEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class LibraryDb : RoomDatabase() {
@@ -263,6 +292,20 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tracks ADD COLUMN genreMain TEXT")
+        db.execSQL("ALTER TABLE tracks ADD COLUMN subGenre TEXT")
+        db.execSQL("ALTER TABLE tracks ADD COLUMN genreChecked INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+/** How badly a track is tagged (see [LibraryDao.needsTags]). */
+const val BADNESS =
+    "((CASE WHEN artist IS NULL OR artist = '' THEN 2 ELSE 0 END) + (CASE WHEN album IS NULL OR album = '' THEN 2 ELSE 0 END) + " +
+        "(CASE WHEN tagsMissing THEN 2 ELSE 0 END) + (CASE WHEN year IS NULL THEN 1 ELSE 0 END) + " +
+        "(CASE WHEN (genre IS NULL OR genre = '') AND genreMain IS NULL THEN 1 ELSE 0 END) + (CASE WHEN artPath IS NULL THEN 1 ELSE 0 END))"
+
 /** App-wide access to the library database. */
 object Library {
     @Volatile private var db: LibraryDb? = null
@@ -270,7 +313,7 @@ object Library {
     fun init(context: Context) {
         if (db == null) {
             db = Room.databaseBuilder(context.applicationContext, LibraryDb::class.java, "library.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
         }
     }
