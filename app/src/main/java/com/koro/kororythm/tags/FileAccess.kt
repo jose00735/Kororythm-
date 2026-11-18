@@ -112,13 +112,17 @@ object FileAccess {
             }
             else -> throw RenameUnsupported("This file can't be renamed from here.")
         }
-        if (!canOpen(context, renamed)) {
+        val openError = openError(context, renamed)
+        if (openError != null) {
             // Don't leave the library pointing at something it can't play: undo.
             if (oldName != null) runCatching {
                 if (isMediaStore(renamed)) cr.update(renamed, ContentValues().apply { put(MediaStore.MediaColumns.DISPLAY_NAME, oldName) }, null, null)
                 else DocumentsContract.renameDocument(cr, renamed, oldName)
             }
-            throw RenameUnsupported("Renaming made the file unreadable, so the old name was kept.")
+            throw RenameUnreadable(
+                "Renaming made the file unreadable (${renamed.authority}: $openError), so the old name was put back.",
+                newName, isMediaStore(uri),
+            )
         }
         renamed
     }
@@ -130,8 +134,42 @@ object FileAccess {
             .recoverCatching { cr.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
     }
 
-    private fun canOpen(context: Context, uri: Uri): Boolean =
-        runCatching { context.contentResolver.openInputStream(uri)?.use { it.read() >= 0 } == true }.getOrDefault(false)
+    /** Null if the file opens and has data, else why not. */
+    private fun openError(context: Context, uri: Uri): String? = try {
+        val ins = context.contentResolver.openInputStream(uri) ?: return "no stream"
+        ins.use { if (it.read() < 0) "empty" else null }
+    } catch (e: Exception) {
+        "${e.javaClass.simpleName}: ${e.message?.take(120)}"
+    }
+
+    /**
+     * Rename by copying, for phones where renaming a media-library file in place breaks access
+     * to it: writes the file again under [newName] in the same folder (Kororythm owns the copy,
+     * so it can always read it) and returns the copy's URI. The caller removes the old file.
+     */
+    suspend fun renameByCopy(context: Context, uri: Uri, newName: String): Uri = withContext(Dispatchers.IO) {
+        val cr = context.contentResolver
+        val dir = File(context.cacheDir, "rename").apply { deleteRecursively(); mkdirs() }
+        val tmp = File(dir, "copy.bin")
+        try {
+            (cr.openInputStream(uri) ?: throw TagWriteException("Can't read the file")).use { ins -> tmp.outputStream().use { ins.copyTo(it) } }
+            val mime = cr.getType(uri) ?: com.koro.kororythm.downloads.YtLogic.mimeFor(newName.substringAfterLast('.', ""))
+            val copy = if (Build.VERSION.SDK_INT >= 29) {
+                com.koro.kororythm.downloads.MusicStore.save(context, tmp, newName, mime, com.koro.kororythm.downloads.MusicStore.relativePathOf(context, uri) ?: "Music/")
+            } else {
+                @Suppress("DEPRECATION")
+                val parent = cr.query(uri, arrayOf(MediaStore.MediaColumns.DATA), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0)?.let { File(it).parentFile } else null }
+                parent?.let { com.koro.kororythm.downloads.MusicStore.saveLegacy(context, tmp, newName, mime, it) }
+            } ?: throw TagWriteException("Couldn't write the renamed copy")
+            openError(context, copy)?.let { throw TagWriteException("The renamed copy can't be read either ($it)") }
+            copy
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
 }
 
-class RenameUnsupported(message: String) : Exception(message)
+open class RenameUnsupported(message: String) : Exception(message)
+
+/** The rename worked but the file couldn't be opened afterwards (it was renamed back). */
+class RenameUnreadable(message: String, val wantedName: String, val mediaStore: Boolean) : RenameUnsupported(message)

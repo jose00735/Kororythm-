@@ -69,6 +69,11 @@ fun TagEditorScreen(vm: TagEditViewModel, player: PlayerActions, onClose: () -> 
         if (r.resultCode == Activity.RESULT_OK) vm.save(player)
     }
     LaunchedEffect(ui.consent) { ui.consent?.let { consent.launch(IntentSenderRequest.Builder(it).build()) } }
+    // After a rename-by-copy: "Allow Kororythm to delete this file?" for the old copy.
+    val deleteConsent = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
+        vm.deleteResult(r.resultCode == Activity.RESULT_OK)
+    }
+    LaunchedEffect(ui.deleteConsent) { ui.deleteConsent?.let { deleteConsent.launch(IntentSenderRequest.Builder(it).build()) } }
     val cb = remember(vm) {
         object : TagEditCallbacks() {
             override fun close() = onClose()

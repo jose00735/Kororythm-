@@ -57,6 +57,8 @@ data class TagEditUi(
     val message: String? = null,
     val error: String? = null,
     val consent: IntentSender? = null,
+    /** Android asks to allow removing the old file after a rename-by-copy. */
+    val deleteConsent: IntentSender? = null,
     val saved: Boolean = false,
 ) {
     val renamed: Boolean get() = fileBase.isNotBlank() && fileBase != originalBase
@@ -202,6 +204,38 @@ class TagEditViewModel(app: Application) : AndroidViewModel(app) {
     fun removeCover() = _ui.update { it.copy(cover = null, coverChanged = false, coverRemoved = true, saved = false) }
     fun dismissConsent() = _ui.update { it.copy(consent = null) }
 
+    private var pendingRemove: Pair<Uri, Boolean>? = null
+
+    /** Deletes the original after a rename-by-copy; Android may ask the user first. */
+    private suspend fun removeOld(old: Uri, retry: Boolean) {
+        val app = getApplication<Application>()
+        when (val d = withContext(Dispatchers.IO) { com.koro.kororythm.tags.Upgrader.deleteOld(app, old) }) {
+            com.koro.kororythm.tags.DeleteStep.Done -> _ui.update { it.copy(message = "Saved and renamed.") }
+            is com.koro.kororythm.tags.DeleteStep.NeedsConsent -> {
+                pendingRemove = old to d.retry
+                _ui.update { it.copy(deleteConsent = d.sender) }
+            }
+            is com.koro.kororythm.tags.DeleteStep.Failed -> _ui.update {
+                it.copy(message = "Saved and renamed. The old copy couldn't be removed (${d.reason}); you can delete it yourself.")
+            }
+        }
+        if (retry) pendingRemove = null
+    }
+
+    /** Result of Android's "allow deleting" dialog for the old file. */
+    fun deleteResult(ok: Boolean) {
+        val (old, retry) = pendingRemove ?: return
+        pendingRemove = null
+        _ui.update { it.copy(deleteConsent = null) }
+        viewModelScope.launch {
+            when {
+                !ok -> _ui.update { it.copy(message = "Saved and renamed. The old copy was kept because removing it wasn't allowed.") }
+                retry -> removeOld(old, retry = true)
+                else -> _ui.update { it.copy(message = "Saved and renamed.") }
+            }
+        }
+    }
+
     // ---- saving ----
     fun save(player: PlayerActions) {
         val s = _ui.value
@@ -229,9 +263,22 @@ class TagEditViewModel(app: Application) : AndroidViewModel(app) {
                 val tagged = FileAccess.rewrite(app, uri, tags)
                 var newUri = uri
                 var renameNote: String? = null
+                var oldToRemove: Uri? = null
                 if (s.renamed) {
                     try {
                         newUri = FileAccess.rename(app, uri, TagNaming.sanitize(s.fileBase) + s.ext)
+                    } catch (e: com.koro.kororythm.tags.RenameUnreadable) {
+                        // Renaming in place broke access on this phone: write a renamed copy instead.
+                        if (e.mediaStore) {
+                            try {
+                                newUri = FileAccess.renameByCopy(app, uri, e.wantedName)
+                                oldToRemove = uri
+                            } catch (c: Exception) {
+                                renameNote = "Tags saved. ${e.message} Copying under the new name failed too: ${c.message}"
+                            }
+                        } else {
+                            renameNote = "Tags saved. ${e.message}"
+                        }
                     } catch (e: com.koro.kororythm.tags.RenameUnsupported) {
                         renameNote = "Tags saved. ${e.message}"
                     }
@@ -249,9 +296,11 @@ class TagEditViewModel(app: Application) : AndroidViewModel(app) {
                         uri = newUri.toString(), busy = null, saved = true, coverChanged = false, coverRemoved = false,
                         originalBase = if (renameNote != null) it.originalBase else it.fileBase,
                         fileBase = if (renameNote != null) it.originalBase else it.fileBase,
-                        message = renameNote ?: if (s.renamed) "Saved into the file and renamed." else "Saved into the file.",
+                        message = renameNote ?: if (oldToRemove != null) "Saved and renamed (as a fresh copy; removing the old file…)"
+                        else if (s.renamed) "Saved into the file and renamed." else "Saved into the file.",
                     )
                 }
+                oldToRemove?.let { removeOld(it, retry = false) }
             } catch (e: Exception) {
                 _ui.update { it.copy(busy = null, error = e.message ?: "Saving failed") }
                 runCatching { player.fileRewritten(uriStr, TrackInfo.read(app, uri)) }
