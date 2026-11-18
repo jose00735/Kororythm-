@@ -96,6 +96,29 @@ class V11ScreenshotTest {
         )
     }
 
+    @Test fun downloadsLog() = both("70b_downloads_log") {
+        val log = """
+            12:31:02 [koro] Queued
+            12:31:02 [koro] Job 1: "Lightcycle Lullaby" by Grid Pilots
+            12:31:02 [koro] Link: https://youtu.be/WohrULEtvBc
+            12:31:02 [koro] Format: MP3 · VBR V0  ·  Source Opus 135 kbps · 48 kHz → MP3 V0 (sound stays at source quality)
+            12:31:02 [koro] Engine already unpacked
+            12:31:02 [koro] yt-dlp 2025.11.12 ready
+            12:31:02 [koro] Running: yt-dlp https://youtu.be/WohrULEtvBc --no-playlist --no-mtime -f bestaudio/best -x -o /cache/ytdl/%(id)s.%(ext)s --audio-format mp3 --audio-quality 0 --newline -v
+            12:31:03 [yt-dlp] [youtube] Extracting URL: https://youtu.be/WohrULEtvBc
+            12:31:03 [yt-dlp] [youtube] WohrULEtvBc: Downloading webpage
+            12:31:04 [yt-dlp] [youtube] WohrULEtvBc: Downloading tv client config
+            12:31:05 [yt-dlp] [info] WohrULEtvBc: Downloading 1 format(s): 251
+            12:31:05 [yt-dlp] [download] Destination: /cache/ytdl/WohrULEtvBc.webm
+            12:31:06 [yt-dlp] [download]  25.0% of    4.12MiB at    2.31MiB/s ETA 00:01
+            12:31:07 [yt-dlp] [download]  60.0% of    4.12MiB at    2.48MiB/s ETA 00:00
+        """.trimIndent()
+        DownloadsContent(
+            DlUi(jobs = jobs.take(1), engineVersion = "2025.11.12", logOpen = jobs[0].id),
+            object : DlCallbacks() { override fun log(id: UUID) = log },
+        )
+    }
+
     @Test fun downloadsEmpty() = paparazzi.snapshot("71_downloads_fetching") {
         DownloadsContent(DlUi(link = "https://youtu.be/x", fetching = true, firstRun = true), DlCallbacks())
     }

@@ -30,6 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -70,6 +71,9 @@ open class DlCallbacks {
     open fun play(job: DlJob) {}
     open fun clearFinished() {}
     open fun updateEngine() {}
+    /** Full log text of a job (LOG button). */
+    open fun log(id: UUID): String = ""
+    open fun copy(text: String) {}
 }
 
 @Composable
@@ -101,6 +105,12 @@ fun DownloadsScreen(vm: DownloadsViewModel, player: PlayerViewModel, onClose: ()
         override fun play(job: DlJob) = vm.play(job, player)
         override fun clearFinished() = vm.clearFinished()
         override fun updateEngine() = vm.updateEngine()
+        override fun log(id: UUID) = vm.log(id)
+        override fun copy(text: String) {
+            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("Kororythm download log", text))
+            android.widget.Toast.makeText(context, "Log copied", android.widget.Toast.LENGTH_SHORT).show()
+        }
     }
     DownloadsContent(ui, cb)
 }
@@ -170,7 +180,7 @@ fun DownloadsContent(ui: DlUi, cb: DlCallbacks) {
                 if (ui.jobs.isEmpty()) {
                     NeonText("Nothing yet. Downloads land in ${MusicStore.FOLDER} and in your library.", size = 11.sp, color = Neon.Dim, glow = null, maxLines = 2)
                 }
-                ui.jobs.forEach { j -> JobRow(j, cb) }
+                ui.jobs.forEach { j -> JobRow(j, cb, logOpen = j.id == ui.logOpen) }
                 if (ui.jobs.any { it.state == JobState.DONE || it.state == JobState.FAILED }) {
                     NeonButton("CLEAR FINISHED", cb::clearFinished, Modifier.padding(top = 6.dp))
                 }
@@ -190,7 +200,8 @@ fun DownloadsContent(ui: DlUi, cb: DlCallbacks) {
 }
 
 @Composable
-private fun JobRow(j: DlJob, cb: DlCallbacks) {
+private fun JobRow(j: DlJob, cb: DlCallbacks, logOpen: Boolean = false) {
+    var showLog by androidx.compose.runtime.saveable.rememberSaveable(j.id.toString()) { androidx.compose.runtime.mutableStateOf(logOpen) }
     Column(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -206,6 +217,7 @@ private fun JobRow(j: DlJob, cb: DlCallbacks) {
                     color = when (j.state) { JobState.FAILED -> Neon.Orange; JobState.DONE -> Neon.Cyan; else -> Neon.Dim },
                 )
             }
+            NeonButton(if (showLog) "LOG ▴" else "LOG ▾", { showLog = !showLog }, Modifier.padding(end = 6.dp), active = showLog)
             when (j.state) {
                 JobState.DONE -> if (j.trackId >= 0) NeonButton("PLAY ▸", { cb.play(j) }, accent = Neon.Orange)
                 JobState.RUNNING, JobState.QUEUED -> NeonButton("CANCEL", { cb.cancel(j.id) })
@@ -215,6 +227,56 @@ private fun JobRow(j: DlJob, cb: DlCallbacks) {
         if (j.state == JobState.RUNNING) {
             Spacer(Modifier.height(5.dp))
             if (j.progress <= 0f || j.progress >= 1f) Scanline() else ProgressBar(j.progress)
+        }
+        if (showLog) LogView(j, cb)
+    }
+}
+
+private val TermBg = androidx.compose.ui.graphics.Color(0xFF02060A)
+private val TermText = androidx.compose.ui.graphics.Color(0xFFB9F6CA)
+private val TermDim = androidx.compose.ui.graphics.Color(0xFF5E7A86)
+private val TermWarn = androidx.compose.ui.graphics.Color(0xFFFFB74D)
+private val TermErr = androidx.compose.ui.graphics.Color(0xFFFF6E6E)
+private val TermCyan = androidx.compose.ui.graphics.Color(0xFF4DD0E1)
+
+/** Live log of one download, terminal style; refreshes while the job runs and follows the end. */
+@Composable
+private fun LogView(j: DlJob, cb: DlCallbacks) {
+    val running = j.state == JobState.RUNNING || j.state == JobState.QUEUED
+    val text by androidx.compose.runtime.produceState(cb.log(j.id), j.id, running) {
+        while (true) {
+            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { cb.log(j.id) }
+            if (!running) break
+            kotlinx.coroutines.delay(500)
+        }
+    }
+    val scroll = rememberScrollState()
+    LaunchedEffect(text.length) { scroll.animateScrollTo(scroll.maxValue) }
+    Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+        Column(
+            Modifier.fillMaxWidth().height(240.dp)
+                .background(TermBg, RoundedCornerShape(6.dp))
+                .neonBorder(TermCyan, 6.dp, 0.4f)
+                .verticalScroll(scroll)
+                .padding(8.dp),
+        ) {
+            if (text.isBlank()) {
+                androidx.compose.material3.Text("(no log yet)", style = Neon.style(9.sp, TermDim, null, spacing = 0.sp).copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
+            }
+            text.lineSequence().filter { it.isNotEmpty() }.forEach { line ->
+                val color = when {
+                    line.contains("[error]") || line.contains("ERROR") -> TermErr
+                    line.contains("WARNING") -> TermWarn
+                    line.contains("[debug]") -> TermDim
+                    line.contains("[yt-dlp]") -> TermText
+                    else -> TermCyan
+                }
+                androidx.compose.material3.Text(line, style = Neon.style(9.sp, color, null, spacing = 0.sp).copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
+            }
+        }
+        Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            NeonText(if (running) "● live" else "${text.lines().count { it.isNotBlank() }} lines", Modifier.weight(1f), size = 9.sp, color = if (running) Neon.Orange else Neon.Dim, glow = null)
+            NeonButton("COPY LOG", { cb.copy(text) })
         }
     }
 }

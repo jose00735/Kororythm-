@@ -50,10 +50,15 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val title = d.getString(K_TITLE) ?: "Download"
         val artist = d.getString(K_ARTIST)
         runCatching { setForeground(foreground(title, 0f)) }
+        log("Job $id: \"$title\"${artist?.let { " by $it" } ?: ""}")
+        log("Link: $url")
+        log("Format: ${format.label}  ·  ${d.getString(K_QUALITY) ?: ""}")
         val work = File(applicationContext.cacheDir, "ytdl/$processId").apply { deleteRecursively(); mkdirs() }
         try {
             stage("Starting engine", 0f)
+            log(if (YtEngine.ready) "Engine already unpacked" else "Unpacking engine (Python, yt-dlp, FFmpeg)…")
             YtEngine.ensure(applicationContext)
+            log("yt-dlp ${YtEngine.version(applicationContext) ?: "(bundled)"} ready")
 
             val req = YoutubeDLRequest(url)
                 .addOption("--no-playlist")
@@ -66,7 +71,11 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             } else {
                 req.addOption("--embed-metadata")
             }
+            req.addOption("--newline")
+            req.addOption("-v") // debug info goes to stderr, shown in the log
+            log("Running: yt-dlp " + req.buildCommand().joinToString(" ") { if (it.contains(' ')) "\"$it\"" else it })
             stage("Downloading", 0f)
+            var lastLoggedPct = -10
             var lastNotified = -1
             // execute() blocks; when the job is cancelled, kill the yt-dlp process so it returns.
             val watcher = launch { try { awaitCancellation() } finally { if (isStopped) YoutubeDL.getInstance().destroyProcessById(processId) } }
@@ -75,11 +84,19 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 val stageName = if (line.contains("ExtractAudio") || line.contains("ffmpeg", true)) "Converting" else "Downloading"
                 setProgressAsync(workDataOf(K_STAGE to stageName, K_PROGRESS to p, K_LINE to line.take(160), K_TITLE to title))
                 val pct = (p * 100).toInt()
+                val isProgress = YtLogic.progressOf(line) != null
+                // every non-progress line, and progress every 5 %
+                if (!isProgress || pct >= lastLoggedPct + 5 || pct >= 100) {
+                    if (isProgress) lastLoggedPct = pct
+                    log(line, "yt-dlp")
+                }
                 if (pct / 5 != lastNotified) {
                     lastNotified = pct / 5
                     runCatching { setForegroundAsync(foreground(title, p)) }
                 }
             } } finally { watcher.cancel() }
+            resp.err?.takeIf { it.isNotBlank() }?.let { log(it, "yt-dlp:err") }
+            log("yt-dlp exited with code ${resp.exitCode} after ${resp.elapsedTime / 1000.0} s")
             if (resp.exitCode != 0) return@withContext Result.failure(err(lastError(resp.err)))
 
             val out = work.listFiles()?.filter { it.isFile && it.length() > 0 && it.extension.lowercase() !in setOf("part", "ytdl", "jpg", "webp", "png") }
@@ -87,8 +104,11 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
 
             stage("Tagging", 1f)
             val ext = out.extension.lowercase()
+            log("Output: ${out.name} (${"%.2f".format(out.length() / 1048576.0)} MB)")
             val final = if (ext == "mp3") {
                 val cover = d.getString(K_THUMB)?.let { fetchCover(it) }
+                log(if (cover != null) "Cover: thumbnail cropped to a square (${cover.size / 1024} KB)" else "Cover: no thumbnail available")
+                log("Writing ID3v2.4 tags: title, artist${if (d.getString(K_ALBUM) != null) ", album" else ""}, source note ${d.getString(K_NOTE)}")
                 val tagged = File(work, "tagged.mp3")
                 TagIo.write(
                     out, tagged,
@@ -100,12 +120,13 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                     ),
                 )
                 tagged
-            } else out
+            } else out.also { log("Kept the original stream; metadata embedded by yt-dlp") }
 
             stage("Saving to ${MusicStore.FOLDER}", 1f)
             val name = YtLogic.fileName(artist, title, ext)
             val uri = MusicStore.save(applicationContext, final, name, YtLogic.mimeFor(ext))
                 ?: return@withContext Result.failure(err("Couldn't save into the Music folder"))
+            log("Saved as ${MusicStore.FOLDER}/$name → $uri")
 
             stage("Adding to library", 1f)
             val track = Scanner(applicationContext, Library.dao).addOne(uri, name, final.length())
@@ -113,20 +134,28 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             if (track != null && ext != "mp3" && (track.title != title || track.artist != artist)) {
                 Library.dao.update(track.copy(title = title, artist = artist ?: track.artist, tagsMissing = false))
             }
+            log(track?.let { "Library track #${it.id}: ${it.codec} ${it.bitrateKbps ?: "?"} kbps, ${it.durationMs / 1000} s" } ?: "Saved, but the library couldn't read it yet (it'll show up on the next scan)")
             com.koro.kororythm.dj.AnalysisWorker.runNow(applicationContext)
+            log("Done ✓")
             Result.success(
                 workDataOf(K_TRACK_ID to (track?.id ?: -1L), K_SAVED_AS to "${MusicStore.FOLDER}/$name", K_TITLE to title),
             )
         } catch (e: YoutubeDL.CanceledException) {
+            log("Cancelled")
             Result.failure(err("Cancelled"))
         } catch (e: Exception) {
-            if (isStopped) Result.failure(err("Cancelled")) else Result.failure(err(describe(e)))
+            if (isStopped) { log("Cancelled"); Result.failure(err("Cancelled")) } else {
+                log("${e.javaClass.simpleName}: ${generateSequence<Throwable>(e) { it.cause }.mapNotNull { it.message }.joinToString("\n")}", "error")
+                Result.failure(err(describe(e)))
+            }
         } finally {
             work.deleteRecursively()
         }
     }
 
     private fun stage(name: String, p: Float) = setProgressAsync(workDataOf(K_STAGE to name, K_PROGRESS to p, K_TITLE to inputData.getString(K_TITLE)))
+
+    private fun log(line: String, tag: String = "koro") = runCatching { DownloadLog.add(applicationContext, id, line, tag) }
 
     private fun err(msg: String) = workDataOf(K_ERROR to msg, K_TITLE to inputData.getString(K_TITLE))
 
@@ -189,6 +218,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .build()
             WorkManager.getInstance(context).enqueue(req)
+            DownloadLog.add(context, req.id, "Queued")
             return req.id
         }
     }

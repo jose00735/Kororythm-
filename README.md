@@ -25,6 +25,7 @@ Built with Kotlin, Jetpack Compose and AndroidX Media3. Design: [docs/ARCHITECTU
 - Files go to **Music/Kororythm** on the phone and straight into the library; downloads keep running in the background with a notification and can be cancelled
 - Honest quality label: it shows the source stream (e.g. "Opus 135 kbps") and stores it in the MP3, so Upgrade quality never treats a re-encoded download as better than its source
 - **UPDATE ENGINE** pulls the newest stable yt-dlp when a site changes
+- **LOG** on each download opens a live, verbose console: the exact yt-dlp command, its output and debug lines, warnings, and every step Kororythm takes (cover, tags, where it saved, library entry); **COPY LOG** for sharing
 
 **Playlists**
 - Create, rename, delete; add from any track's ⋮ menu; reorder (▲ ▼) and remove; **SAVE ☰** in the player saves the queue as a playlist

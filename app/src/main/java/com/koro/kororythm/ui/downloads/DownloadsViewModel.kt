@@ -47,6 +47,8 @@ data class DlUi(
     val engineVersion: String? = null,
     val updating: Boolean = false,
     val updateMessage: String? = null,
+    /** Job whose log starts open (previews). */
+    val logOpen: UUID? = null,
 )
 
 class DownloadsViewModel(app: Application) : AndroidViewModel(app) {
@@ -130,7 +132,12 @@ class DownloadsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun cancel(id: UUID) { wm.cancelWorkById(id) }
-    fun clearFinished() { wm.pruneWork() }
+    fun clearFinished() {
+        com.koro.kororythm.downloads.DownloadLog.prune(getApplication(), _ui.value.jobs.filter { it.state == JobState.RUNNING || it.state == JobState.QUEUED }.map { it.id }.toSet())
+        wm.pruneWork()
+    }
+
+    fun log(id: UUID): String = com.koro.kororythm.downloads.DownloadLog.read(getApplication(), id)
 
     fun play(job: DlJob, player: PlayerActions) {
         if (job.trackId < 0) return
