@@ -44,7 +44,7 @@ import com.koro.kororythm.ui.wizards.AlbumWizardViewModel
 import com.koro.kororythm.ui.wizards.ImportViewModel
 import com.koro.kororythm.ui.wizards.ImportWizardScreen
 
-enum class Screen { PLAYER, LIBRARY, IMPORT, ALBUM, TAGS, DJ, DOWNLOADS }
+enum class Screen { PLAYER, LIBRARY, IMPORT, ALBUM, TAGS, DJ, DOWNLOADS, BULK }
 
 class MainActivity : ComponentActivity() {
 
@@ -57,6 +57,22 @@ class MainActivity : ComponentActivity() {
     private val downloadsVm: DownloadsViewModel by viewModels()
     private val lyricsVm: LyricsViewModel by viewModels()
     private val upgradeVm: UpgradeViewModel by viewModels()
+    private val bulkVm: com.koro.kororythm.ui.bulk.BulkViewModel by viewModels()
+
+    /** Hidden bulk-edit panel: Volume Up, Down, Up within 2 seconds. */
+    private val bulkKeys = com.koro.kororythm.ui.bulk.KeySequence(
+        listOf(android.view.KeyEvent.KEYCODE_VOLUME_UP, android.view.KeyEvent.KEYCODE_VOLUME_DOWN, android.view.KeyEvent.KEYCODE_VOLUME_UP),
+    )
+    private var bulkRequested by mutableStateOf(0)
+
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean {
+        if ((keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP || keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN) &&
+            event.repeatCount == 0 && bulkKeys.press(keyCode, event.eventTime)
+        ) {
+            bulkRequested++
+        }
+        return super.onKeyDown(keyCode, event) // volume still changes as usual
+    }
 
     /** A link shared from YouTube etc., waiting for the UI to open Downloads. */
     private var pendingShare by mutableStateOf<String?>(null)
@@ -84,6 +100,15 @@ class MainActivity : ComponentActivity() {
             var downloadsReturn by rememberSaveable { mutableStateOf(Screen.PLAYER) }
             BackHandler(enabled = screen == Screen.DOWNLOADS) { screen = downloadsReturn }
             val openDownloads: () -> Unit = { downloadsReturn = screen; screen = Screen.DOWNLOADS }
+            var bulkReturn by rememberSaveable { mutableStateOf(Screen.LIBRARY) }
+            LaunchedEffect(bulkRequested) {
+                if (bulkRequested > 0 && screen != Screen.BULK) {
+                    bulkReturn = screen
+                    screen = Screen.BULK
+                    android.widget.Toast.makeText(this@MainActivity, "Bulk edit", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+            BackHandler(enabled = screen == Screen.BULK) { screen = bulkReturn }
             // Lyrics drop down over any screen, like a Guake console.
             var lyricsOpen by rememberSaveable { mutableStateOf(false) }
             var lyricsTrack by remember { mutableStateOf<TrackInfo?>(null) }
@@ -136,6 +161,7 @@ class MainActivity : ComponentActivity() {
                             progress = if (fixQueue.isEmpty()) null else "${fixPos + 1}/${fixQueue.size}",
                         )
                         Screen.DJ -> DjScreen(djVm, vm, onClose = { screen = Screen.PLAYER })
+                        Screen.BULK -> com.koro.kororythm.ui.bulk.BulkScreen(bulkVm, vm, onClose = { screen = bulkReturn })
                         Screen.DOWNLOADS -> DownloadsScreen(downloadsVm, vm, onClose = { screen = downloadsReturn }, upgrade = upgradeVm)
                         Screen.ALBUM -> AlbumWizardScreen(
                             albumVm,

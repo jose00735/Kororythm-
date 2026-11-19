@@ -17,6 +17,14 @@ An Android music player for FLAC and MP3 with a classic Winamp layout, two skins
 
 Built with Kotlin, Jetpack Compose and AndroidX Media3. Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## New in v1.4
+
+**Bulk edit** (hidden panel: press **Volume Up, Volume Down, Volume Up** within 2 seconds anywhere in the app; the volume still changes as usual)
+- Filter the library, tick songs one by one or **ALL SHOWN**, **ONLY SEL.** to review the selection
+- Tick ARTIST, ALBUM, ALBUM ARTIST, GENRE or YEAR and type the value: **APPLY TO N SONGS** writes it into every selected FLAC/MP3 (one Android permission dialog for all of them) and updates the library; everything else in each file (title, track numbers, cover, lyrics) is kept, and ID3v2.3 files come out as v2.4. Empty value = remove that field
+- **☰ ADD N TO PLAYLIST** puts the selection into an existing playlist or a new one
+- Verified: unit tests plus mutagen/ffmpeg checks that only the chosen fields change and the audio stays bit-identical
+
 ## New in v1.3
 
 - **Delete file** (⋮ ▸ Delete file…): asks first, removes the file from the phone (Android may ask once) and the song from the library, its playlists, hot cues and the queue

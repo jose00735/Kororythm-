@@ -56,7 +56,31 @@ object FileAccess {
      * it back. If putting it back fails, the original bytes are restored.
      * Returns the new file (in cache) so the caller can re-index it; delete it afterwards.
      */
-    suspend fun rewrite(context: Context, uri: Uri, tags: TagData): File = withContext(Dispatchers.IO) {
+    suspend fun rewrite(context: Context, uri: Uri, tags: TagData): File = rewriteWith(context, uri) { tags }
+
+    /** Write access for many files at once: one Android dialog covers all of them (Android 11+). */
+    class BulkAccess(val ok: List<Uri>, val consent: IntentSender?, val needConsent: List<Uri>, val denied: List<Uri>)
+
+    fun checkMany(context: Context, uris: List<Uri>): BulkAccess {
+        val ok = mutableListOf<Uri>()
+        val ask = mutableListOf<Uri>()
+        val denied = mutableListOf<Uri>()
+        uris.forEach { u ->
+            try {
+                context.contentResolver.openFileDescriptor(u, "rw")?.close()
+                ok += u
+            } catch (e: SecurityException) {
+                if (Build.VERSION.SDK_INT >= 30 && isMediaStore(u)) ask += u else denied += u
+            } catch (e: Exception) {
+                denied += u
+            }
+        }
+        val sender = if (ask.isNotEmpty()) MediaStore.createWriteRequest(context.contentResolver, ask).intentSender else null
+        return BulkAccess(ok, sender, ask, denied)
+    }
+
+    /** Like [rewrite], but the new tags are built from the file's current ones (bulk edits). */
+    suspend fun rewriteWith(context: Context, uri: Uri, build: (current: File) -> TagData): File = withContext(Dispatchers.IO) {
         val cr = context.contentResolver
         val dir = File(context.cacheDir, "tagedit").apply { mkdirs() }
         val original = File.createTempFile("orig", ".bin", dir)
@@ -65,7 +89,7 @@ object FileAccess {
             (cr.openInputStream(uri) ?: throw TagWriteException("Can't read the file")).use { ins ->
                 original.outputStream().use { ins.copyTo(it) }
             }
-            TagIo.write(original, tagged, tags)
+            TagIo.write(original, tagged, build(original))
             try {
                 (cr.openOutputStream(uri, "wt") ?: throw TagWriteException("Can't write the file")).use { out ->
                     tagged.inputStream().use { it.copyTo(out) }

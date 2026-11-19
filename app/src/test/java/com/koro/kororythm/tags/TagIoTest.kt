@@ -126,4 +126,32 @@ class TagIoTest {
         val mp3Later = File(out, "lyrics_kept.mp3").also { TagIo.write(mp3, it, tags) }
         assertArrayEquals(mp3Audio(File(res, "in_v24.mp3")), mp3Audio(mp3Later))
     }
+
+    @Test fun bulkUpdateChangesOnlyTheChosenFields() {
+        val changes = mapOf(TagIo.Field.ARTIST to "Grupo Niche", TagIo.Field.GENRE to "Salsa")
+        for ((name, outName) in listOf("in16.flac" to "bulk.flac", "in_v24.mp3" to "bulk.mp3")) {
+            val full = roundTrip(name, "full_$outName")
+            val bulk = File(out, outName).also { TagIo.update(full, it, changes) }
+            val r = TagIo.read(bulk)
+            assertEquals("Grupo Niche", r.artist)
+            assertEquals("Salsa", r.genre)
+            // everything else untouched
+            assertEquals(tags.title, r.title)
+            assertEquals(tags.album, r.album)
+            assertEquals(tags.albumArtist, r.albumArtist)
+            assertEquals(tags.year, r.year)
+            assertEquals(tags.trackNo, r.trackNo)
+            assertEquals(tags.trackTotal, r.trackTotal)
+            assertEquals(tags.discNo, r.discNo)
+        }
+        assertArrayEquals(flacAudio(File(res, "in16.flac")), flacAudio(File(out, "bulk.flac")))
+        assertArrayEquals(mp3Audio(File(res, "in_v24.mp3")), mp3Audio(File(out, "bulk.mp3")))
+
+        // An ID3v2.3 file straight from another tagger: its other fields survive the move to v2.4.
+        val before = TagIo.read(File(res, "in_v23.mp3"))
+        val v23 = File(out, "bulk_v23.mp3").also { TagIo.update(File(res, "in_v23.mp3"), it, mapOf(TagIo.Field.ALBUM to "Nueva")) }
+        val after = TagIo.read(v23)
+        assertEquals("Nueva", after.album)
+        assertEquals(before.copy(album = "Nueva"), after)
+    }
 }

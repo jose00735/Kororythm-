@@ -98,6 +98,18 @@ uslt = t.getall("USLT")
 check(len(uslt) == 1 and uslt[0].text == LRC and uslt[0].lang == "eng", "MP3 USLT lyrics kept after a later edit")
 same_audio("in_v24.mp3", "lyrics_kept.mp3")
 
+# bulk edit: only artist + genre changed, the rest (and the cover) kept
+f = FLAC(os.path.join(OUT, "bulk.flac"))
+check(f.get("artist") == ["Grupo Niche"] and f.get("genre") == ["Salsa"], "FLAC bulk: artist + genre changed")
+check(f.get("title") == [EXPECT["title"]] and f.get("tracknumber") == ["3"] and len(f.pictures) == 1, "FLAC bulk: title, track and cover kept")
+t = ID3(os.path.join(OUT, "bulk.mp3"))
+check(str(t["TPE1"]) == "Grupo Niche" and str(t["TCON"]) == "Salsa", "MP3 bulk: artist + genre changed")
+check(str(t["TIT2"]) == EXPECT["title"] and str(t["TRCK"]) == "3/12" and len(t.getall("APIC")) == 1, "MP3 bulk: title, track and cover kept")
+same_audio("in_v24.mp3", "bulk.mp3")
+t = ID3(os.path.join(OUT, "bulk_v23.mp3"))
+check(str(t["TALB"]) == "Nueva" and t.version[:2] == (2, 4), "MP3 v2.3 bulk: album changed, written as ID3v2.4")
+same_audio("in_v23.mp3", "bulk_v23.mp3")
+
 print()
 if failures:
     print(f"{len(failures)} check(s) failed")

@@ -68,6 +68,39 @@ object TagIo {
     }
 
     /** Reads [input], writes a copy with new tags to [output]. */
+    /** The text tags a file has now (title, artist, album…); cover and lyrics aren't read. */
+    fun read(input: File): TagData = when (detect(input)) {
+        AudioFormat.FLAC -> Flac.read(input)
+        AudioFormat.MP3 -> Id3.read(input)
+        else -> TagData()
+    }
+
+    /** Fields a bulk edit can change. */
+    enum class Field { ARTIST, ALBUM, ALBUM_ARTIST, GENRE, YEAR }
+
+    /**
+     * Changes only [changes] and keeps every other tag the file has (title, track numbers,
+     * cover, lyrics…). A blank value clears that field.
+     */
+    fun update(input: File, output: File, changes: Map<Field, String>) {
+        write(input, output, merge(read(input), changes))
+    }
+
+    fun merge(base: TagData, changes: Map<Field, String>): TagData {
+        var t = base
+        changes.forEach { (f, v) ->
+            val value = v.trim().ifEmpty { null }
+            t = when (f) {
+                Field.ARTIST -> t.copy(artist = value)
+                Field.ALBUM -> t.copy(album = value)
+                Field.ALBUM_ARTIST -> t.copy(albumArtist = value)
+                Field.GENRE -> t.copy(genre = value)
+                Field.YEAR -> t.copy(year = value?.take(4)?.toIntOrNull())
+            }
+        }
+        return t
+    }
+
     fun write(input: File, output: File, tags: TagData) {
         when (detect(input)) {
             AudioFormat.FLAC -> Flac.write(input, output, tags)
@@ -187,6 +220,22 @@ object TagIo {
             add("LYRICS", t.lyrics)
         }
 
+        fun read(input: File): TagData = RandomAccessFile(input, "r").use { raf ->
+            val (blocks, _) = readBlocks(raf)
+            val c = blocks.firstOrNull { it.type == VORBIS }?.let { parseVorbis(it.data).second }.orEmpty()
+            fun v(vararg keys: String) = keys.firstNotNullOfOrNull { k ->
+                c.firstOrNull { it.substringBefore('=').equals(k, ignoreCase = true) }?.substringAfter('=')?.trim()?.takeIf { it.isNotEmpty() }
+            }
+            val track = v("TRACKNUMBER")
+            TagData(
+                title = v("TITLE"), artist = v("ARTIST"), album = v("ALBUM"), albumArtist = v("ALBUMARTIST", "ALBUM ARTIST"),
+                genre = v("GENRE"), year = v("DATE", "YEAR")?.take(4)?.toIntOrNull(),
+                trackNo = track?.substringBefore('/')?.trim()?.toIntOrNull(),
+                trackTotal = v("TRACKTOTAL", "TOTALTRACKS")?.toIntOrNull() ?: track?.substringAfter('/', "")?.trim()?.toIntOrNull(),
+                discNo = v("DISCNUMBER")?.substringBefore('/')?.trim()?.toIntOrNull(),
+            )
+        }
+
         fun write(input: File, output: File, t: TagData) {
             RandomAccessFile(input, "r").use { raf ->
                 val (blocks, audioStart) = readBlocks(raf)
@@ -236,7 +285,27 @@ object TagIo {
         class Frame(val id: String, val flags: ByteArray, val body: ByteArray)
 
         /** Returns (frames we can keep, end of the old tag). */
-        fun readOld(raf: RandomAccessFile): Pair<List<Frame>, Long> {
+        /** Text of a T*** frame (any of the four ID3 encodings). */
+        private fun text(body: ByteArray): String? {
+            if (body.isEmpty()) return null
+            val cs = when (body[0].toInt()) { 1 -> Charsets.UTF_16; 2 -> Charsets.UTF_16BE; 3 -> Charsets.UTF_8; else -> Charsets.ISO_8859_1 }
+            return String(body, 1, body.size - 1, cs).split('\u0000').firstOrNull { it.isNotBlank() }?.trim()
+        }
+
+        fun read(input: File): TagData = RandomAccessFile(input, "r").use { raf ->
+            val (frames, _) = readOld(raf, keepManaged = true)
+            fun v(id: String) = frames.firstOrNull { it.id == id }?.let { text(it.body) }?.takeIf { it.isNotEmpty() }
+            val trck = v("TRCK")
+            TagData(
+                title = v("TIT2"), artist = v("TPE1"), album = v("TALB"), albumArtist = v("TPE2"), genre = v("TCON"),
+                year = (v("TDRC") ?: v("TYER") ?: v("TORY"))?.take(4)?.toIntOrNull(),
+                trackNo = trck?.substringBefore('/')?.trim()?.toIntOrNull(),
+                trackTotal = trck?.substringAfter('/', "")?.trim()?.toIntOrNull(),
+                discNo = v("TPOS")?.substringBefore('/')?.trim()?.toIntOrNull(),
+            )
+        }
+
+        fun readOld(raf: RandomAccessFile, keepManaged: Boolean = false): Pair<List<Frame>, Long> {
             if (raf.length() < 10) return emptyList<Frame>() to 0L
             val h = ByteArray(10)
             raf.seek(0)
@@ -266,7 +335,7 @@ object TagIo {
                 p += 10 + len
                 // Skip frames whose flags change their layout between versions (compression, encryption…).
                 val layoutFlags = if (major == 4) fflags[1].toInt() and 0x4F else fflags[1].toInt() and 0xE0
-                if (id in MANAGED || layoutFlags != 0) continue
+                if ((id in MANAGED && !keepManaged) || layoutFlags != 0) continue
                 if (id == "APIC") { frames += Frame(id, byteArrayOf(0, 0), body); continue }
                 frames += Frame(id, byteArrayOf(0, 0), body)
             }
