@@ -8,6 +8,9 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -278,14 +281,16 @@ fun ClickWheel(modifier: Modifier, onTick: (Int) -> Unit, onPress: (WheelButton)
         metal != null -> Brush.radialGradient(metal.face)
         else -> Brush.radialGradient(listOf(Color(0xFF0E1A2A), Color(0xFF060C16)))
     }
-    val label = if (pod || metal != null) Color(0xFF7D858F) else Neon.Cyan
+    // Darker than the classic grey so the labels clear 3:1 on the light ring.
+    val label = if (pod || metal != null) Color(0xFF636B75) else Neon.Cyan
     val centerFace = when {
         pod -> Brush.verticalGradient(listOf(Color.White, Color(0xFFEDEFF2)))
         metal != null -> Brush.verticalGradient(metal.face)
         else -> Brush.radialGradient(listOf(Color(0xFF13233A), Color(0xFF07101C)))
     }
-    Box(
-        modifier.pointerInput(Unit) {
+    BoxWithConstraints(
+        modifier.semantics { contentDescription = "Click wheel. Spin to scroll; press Menu, Previous, Next, Play or the centre" }
+            .pointerInput(Unit) {
             awaitEachGesture {
                 val down = awaitFirstDown()
                 val c = Offset(size.width / 2f, size.height / 2f)
@@ -330,6 +335,7 @@ fun ClickWheel(modifier: Modifier, onTick: (Int) -> Unit, onPress: (WheelButton)
         },
         contentAlignment = Alignment.Center,
     ) {
+        val wheelSize = minOf(maxWidth, maxHeight)
         Canvas(Modifier.fillMaxSize()) {
             val r = size.minDimension / 2
             drawCircle(Color.Black.copy(alpha = 0.18f), r, center + Offset(0f, 3f))
@@ -341,23 +347,29 @@ fun ClickWheel(modifier: Modifier, onTick: (Int) -> Unit, onPress: (WheelButton)
             if (metal?.chrome == true) {
                 drawCircle(Brush.linearGradient(listOf(Color.Transparent, Color.White.copy(alpha = 0.45f), Color.Transparent), Offset(0f, 0f), Offset(size.width, size.height)), r)
             }
-            // ⏮ ⏭ glyphs drawn as shapes (fonts vary)
-            val s = r * 0.09f
+            // ⏮ ⏭ ⏯ drawn as shapes (fonts vary), all on the same ring radius as MENU.
+            val s = r * 0.085f
+            val rr = r * 0.69f
             fun tri(cx: Float, cy: Float, dir: Float) {
                 val p = Path().apply { moveTo(cx - s * dir, cy - s); lineTo(cx + s * dir, cy); lineTo(cx - s * dir, cy + s); close() }
                 drawPath(p, label)
             }
             val y = center.y
-            tri(center.x - r * 0.78f, y, -1f); tri(center.x - r * 0.78f - s * 1.4f, y, -1f)
-            drawLine(label, Offset(center.x - r * 0.78f - s * 2.6f, y - s), Offset(center.x - r * 0.78f - s * 2.6f, y + s), 2.5f)
-            tri(center.x + r * 0.78f, y, 1f); tri(center.x + r * 0.78f + s * 1.4f, y, 1f)
-            drawLine(label, Offset(center.x + r * 0.78f + s * 2.6f, y - s), Offset(center.x + r * 0.78f + s * 2.6f, y + s), 2.5f)
+            val bw = s * 0.45f
+            // previous: |◀◀ centred on the left of the ring
+            val lx = center.x - rr
+            tri(lx - s * 0.35f, y, -1f); tri(lx + s * 1.05f, y, -1f)
+            drawRect(label, Offset(lx - s * 1.35f - bw - s * 0.2f, y - s), Size(bw, s * 2))
+            // next: ▶▶| mirrored on the right
+            val rx = center.x + rr
+            tri(rx + s * 0.35f, y, 1f); tri(rx - s * 1.05f, y, 1f)
+            drawRect(label, Offset(rx + s * 1.35f + s * 0.2f, y - s), Size(bw, s * 2))
             // play / pause at the bottom
-            val by = center.y + r * 0.78f
-            tri(center.x - s * 1.3f, by, 1f)
-            drawRect(label, Offset(center.x + s * 0.5f, by - s), Size(s * 0.55f, s * 2))
-            drawRect(label, Offset(center.x + s * 1.4f, by - s), Size(s * 0.55f, s * 2))
+            val by = center.y + rr
+            tri(center.x - s * 1.1f, by, 1f)
+            drawRect(label, Offset(center.x + s * 0.4f, by - s), Size(bw * 1.15f, s * 2))
+            drawRect(label, Offset(center.x + s * 1.3f, by - s), Size(bw * 1.15f, s * 2))
         }
-        NeonText("MENU", Modifier.align(Alignment.TopCenter).padding(top = 14.dp), size = 13.sp, weight = FontWeight.Bold, color = label, glow = null, spacing = 2.sp)
+        NeonText("MENU", Modifier.offset(y = -(wheelSize / 2) * 0.69f), size = 13.sp, weight = FontWeight.Bold, color = label, glow = null, spacing = 2.sp)
     }
 }

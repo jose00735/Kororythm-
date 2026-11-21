@@ -355,11 +355,11 @@ fun PlaylistPanel(
 /** Small header: parrot mark + name. */
 @Composable
 fun Header(output: OutputDevice, modifier: Modifier = Modifier, onOpenLibrary: () -> Unit = {}) {
-    // ◐ STYLE opens the skin and layout chooser; the choice is remembered.
+    // STYLE opens the skin and layout chooser; the choice is remembered.
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Canvas(Modifier.size(34.dp)) { drawParrot(Offset.Zero, size.minDimension) }
         Spacer(Modifier.width(8.dp))
-        NeonText("KORORYTHM", Modifier.weight(1f), size = 16.sp, weight = FontWeight.Bold, spacing = 5.sp)
+        NeonText("KORORYTHM", Modifier.weight(1f).padding(end = 6.dp), size = 16.sp, weight = FontWeight.Bold, spacing = 4.sp)
         // Lit when the DAC is really getting untouched audio; dim when it could (switch it on in DJ ▸ Sound).
         val bpActive by AudioBus.bitPerfectActive.collectAsState()
         if (output.bitPerfectCapable || bpActive) {
@@ -369,7 +369,7 @@ fun Header(output: OutputDevice, modifier: Modifier = Modifier, onOpenLibrary: (
             }
             Spacer(Modifier.width(6.dp))
         }
-        NeonButton("◐ STYLE", { StyleSheetState.open = true })
+        NeonButton("STYLE", { StyleSheetState.open = true })
         Spacer(Modifier.width(6.dp))
         NeonButton("LIBRARY", onOpenLibrary, accent = Neon.Orange)
     }

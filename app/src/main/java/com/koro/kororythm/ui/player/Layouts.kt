@@ -1,5 +1,14 @@
 package com.koro.kororythm.ui.player
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.Role
+
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.foundation.background
@@ -69,7 +78,7 @@ object StyleSheetState {
     var open by mutableStateOf(false)
 }
 
-/** ◐ STYLE: pick a skin and a layout; changes apply live behind the sheet. */
+/** STYLE: pick a skin and a layout; changes apply live behind the sheet. */
 @Composable
 fun StyleSheet() {
     if (!StyleSheetState.open) return
@@ -115,19 +124,29 @@ private fun Choice(title: String, blurb: String, on: Boolean, swatch: List<Color
         Modifier.fillMaxWidth().padding(vertical = 3.dp)
             .background(c.copy(alpha = if (on) 0.12f else 0.04f), RoundedCornerShape(8.dp))
             .neonBorder(c, 8.dp, if (on) 0.9f else 0.3f)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 9.dp),
+            .selectable(selected = on, role = Role.RadioButton, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
             NeonText(title, size = 13.sp, weight = FontWeight.Bold, color = if (on) Neon.Orange else Neon.Ink, glow = null)
-            NeonText(blurb, size = 10.sp, color = Neon.Dim, glow = null)
+            NeonText(blurb, Modifier.padding(top = 2.dp), size = 10.sp, color = Neon.Dim, glow = null, maxLines = 2)
         }
         swatch?.let {
             Row(Modifier.padding(start = 8.dp)) {
-                it.forEach { col -> Box(Modifier.size(14.dp).background(Brush.verticalGradient(listOf(col, col)), RoundedCornerShape(3.dp)).padding(1.dp)); Spacer(Modifier.width(3.dp)) }
+                // A hairline keeps white swatches visible on light skins.
+                it.forEach { col ->
+                    Box(Modifier.size(14.dp).background(col, RoundedCornerShape(3.dp)).border(1.dp, Neon.Dim.copy(alpha = 0.45f), RoundedCornerShape(3.dp)))
+                    Spacer(Modifier.width(3.dp))
+                }
             }
         }
-        if (on) NeonText("✓", Modifier.padding(start = 8.dp), size = 15.sp, color = Neon.Orange, glow = null)
+        // Fixed slot for the check, so rows don't shift when the choice changes.
+        Canvas(Modifier.padding(start = 8.dp).size(16.dp)) {
+            if (on) {
+                val p = Path().apply { moveTo(size.width * 0.12f, size.height * 0.55f); lineTo(size.width * 0.4f, size.height * 0.8f); lineTo(size.width * 0.9f, size.height * 0.22f) }
+                drawPath(p, Neon.Orange, style = Stroke(size.width * 0.14f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
+        }
     }
 }

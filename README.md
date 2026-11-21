@@ -17,6 +17,14 @@ An Android music player for FLAC and MP3 with a classic Winamp layout, two skins
 
 Built with Kotlin, Jetpack Compose and AndroidX Media3. Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## New in v1.5.1 — layout polish
+
+- **Cover**: the art, its reflection and the song name now sit together as one block; the deck is symmetric (shuffle · prev · play · next · lyrics) with 48 dp+ keys; bigger, readable *Up next* covers.
+- **Pod**: the wheel's ⏮ ⏭ ⏯ and MENU sit on one ring and no longer touch the rim; darker labels for contrast on light skins.
+- **Prism**: soft scrims keep the title and the top buttons readable over the brightest colours; the gesture hint shows once and fades.
+- **Style sheet**: descriptions wrap instead of being cut off, white swatches get an outline, the choice is announced as a radio option.
+- Hand-drawn shuffle and lyrics icons replace text glyphs; every transport key now has a TalkBack label.
+
 ## New in v1.5
 
 - **Layouts** — tap **◐ STYLE** on the player to switch between four main-screen layouts:

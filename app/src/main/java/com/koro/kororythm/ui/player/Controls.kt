@@ -36,18 +36,36 @@ import com.koro.kororythm.ui.skin.Neon
 import com.koro.kororythm.ui.skin.hifiFace
 import com.koro.kororythm.ui.skin.neonBorder
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 
-enum class TIcon { PREV, PLAY, PAUSE, STOP, NEXT, EJECT }
+enum class TIcon(val label: String) {
+    PREV("Previous"), PLAY("Play"), PAUSE("Pause"), STOP("Stop"), NEXT("Next"), EJECT("Open files"),
+    SHUFFLE("Shuffle"), LYRICS("Lyrics"),
+}
 
 /** Transport button with a hand-drawn neon icon. */
 @Composable
-fun TransportButton(icon: TIcon, onClick: () -> Unit, modifier: Modifier = Modifier, accent: Color = Neon.Cyan, size: Dp = 44.dp) {
+fun TransportButton(
+    icon: TIcon,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    accent: Color = Neon.Cyan,
+    size: Dp = 44.dp,
+    active: Boolean = false,
+) {
     val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
+    val down by source.collectIsPressedAsState()
+    val pressed = down || active
     val face = if (Neon.isHiFi) Modifier.background(hifiFace(pressed), RoundedCornerShape(8.dp))
     else Modifier.background(if (pressed) accent.copy(alpha = 0.22f) else Color.Transparent, RoundedCornerShape(8.dp))
     val iconColor = when {
-        Neon.isHiFi -> if (accent == Neon.Cyan) Neon.Ink else accent
+        Neon.isHiFi -> if (active) Neon.Cyan else if (accent == Neon.Cyan) Neon.Ink else accent
         pressed -> Neon.Ink
         else -> accent
     }
@@ -56,7 +74,12 @@ fun TransportButton(icon: TIcon, onClick: () -> Unit, modifier: Modifier = Modif
             .size(size)
             .then(face)
             .neonBorder(accent, 8.dp, if (pressed) 1f else 0.55f)
-            .clickable(interactionSource = source, indication = null, onClick = onClick),
+            .clickable(interactionSource = source, indication = null, onClick = onClick)
+            .semantics {
+                contentDescription = icon.label
+                role = Role.Button
+                if (icon == TIcon.SHUFFLE) stateDescription = if (active) "On" else "Off"
+            },
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(size * 0.42f)) {
@@ -86,6 +109,29 @@ private fun DrawScope.drawTransportIcon(icon: TIcon, c: Color) {
         TIcon.STOP -> drawRect(c, Offset(w * 0.08f, h * 0.08f), Size(w * 0.84f, h * 0.84f))
         TIcon.NEXT -> { tri(0f, w - bar, true); drawRect(c, Offset(w - bar, 0f), Size(bar, h)) }
         TIcon.PREV -> { drawRect(c, Offset.Zero, Size(bar, h)); tri(bar, w, false) }
+        TIcon.SHUFFLE -> {
+            // two crossing paths, each ending in an arrowhead on the right
+            val sw = w * 0.11f
+            val a = Path().apply { moveTo(0f, h * 0.22f); cubicTo(w * 0.45f, h * 0.22f, w * 0.45f, h * 0.78f, w * 0.82f, h * 0.78f) }
+            val b = Path().apply { moveTo(0f, h * 0.78f); cubicTo(w * 0.45f, h * 0.78f, w * 0.45f, h * 0.22f, w * 0.82f, h * 0.22f) }
+            drawPath(a, c, style = Stroke(sw, cap = StrokeCap.Round))
+            drawPath(b, c, style = Stroke(sw, cap = StrokeCap.Round))
+            for (y in floatArrayOf(h * 0.22f, h * 0.78f)) {
+                drawPath(Path().apply { moveTo(w * 0.72f, y - h * 0.17f); lineTo(w, y); lineTo(w * 0.72f, y + h * 0.17f); close() }, c)
+            }
+        }
+        TIcon.LYRICS -> {
+            // a quaver: head, stem, flag
+            drawOval(c, Offset(w * 0.12f, h * 0.66f), Size(w * 0.42f, h * 0.32f))
+            drawRect(c, Offset(w * 0.44f, h * 0.04f), Size(w * 0.1f, h * 0.78f))
+            val f = Path().apply {
+                moveTo(w * 0.5f, h * 0.04f)
+                cubicTo(w * 0.62f, h * 0.2f, w * 0.95f, h * 0.24f, w * 0.82f, h * 0.56f)
+                cubicTo(w * 0.84f, h * 0.36f, w * 0.68f, h * 0.3f, w * 0.5f, h * 0.26f)
+                close()
+            }
+            drawPath(f, c)
+        }
         TIcon.EJECT -> {
             val p = Path().apply { moveTo(0f, h * 0.62f); lineTo(w / 2, 0f); lineTo(w, h * 0.62f); close() }
             drawPath(p, c)

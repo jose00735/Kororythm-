@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -52,6 +53,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -78,14 +81,14 @@ class LayoutHooks(
     val onLyrics: () -> Unit = {},
 )
 
-/** Small top bar shared by the alternative layouts: logo, ◐ STYLE, LIBRARY. */
+/** Small top bar shared by the alternative layouts: logo, STYLE, LIBRARY. */
 @Composable
 fun LayoutTopBar(hooks: LayoutHooks, modifier: Modifier = Modifier, ink: Color = Neon.Ink) {
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Canvas(Modifier.size(28.dp)) { drawParrot(androidx.compose.ui.geometry.Offset.Zero, size.minDimension) }
         Spacer(Modifier.width(8.dp))
         NeonText("KORORYTHM", Modifier.weight(1f), size = 13.sp, weight = FontWeight.Bold, spacing = 4.sp, color = ink)
-        NeonButton("◐ STYLE", { StyleSheetState.open = true })
+        NeonButton("STYLE", { StyleSheetState.open = true })
         Spacer(Modifier.width(6.dp))
         NeonButton("LIBRARY", hooks.onOpenLibrary, accent = Neon.Orange)
     }
@@ -111,75 +114,87 @@ fun CoverLayout(st: PlayerUiState, actions: PlayerActions, hooks: LayoutHooks) {
             val drag = remember { Animatable(0f) }
             val scope = rememberCoroutineScope()
             BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                val side = minOf(maxWidth, maxHeight * 0.82f)
-                Column(
-                    Modifier.graphicsLayer {
-                        translationX = drag.value
-                        rotationY = -drag.value / 40f
-                        alpha = 1f - (abs(drag.value) / 900f).coerceAtMost(0.6f)
-                    }
-                        .pointerInput(st.currentIndex) {
-                            detectHorizontalDragGestures(
-                                onDragEnd = {
-                                    scope.launch {
-                                        when {
-                                            drag.value < -160f -> actions.next()
-                                            drag.value > 160f -> actions.previous()
-                                        }
-                                        drag.animateTo(0f, spring(0.7f))
-                                    }
-                                },
-                            ) { ch, dx -> ch.consume(); scope.launch { drag.snapTo(drag.value + dx) } }
+                // Cover, its reflection and the song's name read as one object; the slack goes around it.
+                val side = minOf(maxWidth, (maxHeight - 64.dp) / 1.12f)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        Modifier.graphicsLayer {
+                            translationX = drag.value
+                            rotationY = -drag.value / 40f
+                            alpha = 1f - (abs(drag.value) / 900f).coerceAtMost(0.6f)
                         }
-                        .pointerInput(Unit) { detectTapGestures(onTap = { actions.playPause() }) },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Box(Modifier.size(side).clip(RoundedCornerShape(10.dp)).neonBorder(Neon.Cyan, 10.dp, 0.5f)) {
-                        ArtThumb(null, Modifier.fillMaxSize(), size = side, audio = cur?.uri)
-                    }
-                    // floor reflection
-                    Box(
-                        Modifier.size(side, side * 0.16f).graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen; clip = true }
-                            .drawWithContent {
-                                drawContent()
-                                drawRect(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.35f), Color.Transparent)), blendMode = BlendMode.DstIn)
-                            },
+                            .pointerInput(st.currentIndex) {
+                                detectHorizontalDragGestures(
+                                    onDragEnd = {
+                                        scope.launch {
+                                            when {
+                                                drag.value < -160f -> actions.next()
+                                                drag.value > 160f -> actions.previous()
+                                            }
+                                            drag.animateTo(0f, spring(0.7f))
+                                        }
+                                    },
+                                ) { ch, dx -> ch.consume(); scope.launch { drag.snapTo(drag.value + dx) } }
+                            }
+                            .pointerInput(Unit) { detectTapGestures(onTap = { actions.playPause() }) }
+                            .semantics { contentDescription = "Album art. Tap to play or pause, swipe for next or previous" },
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        ArtThumb(
-                            null,
-                            Modifier.size(side).graphicsLayer { scaleY = -1f },
-                            size = side, audio = cur?.uri,
-                        )
+                        Box(Modifier.size(side).clip(RoundedCornerShape(10.dp)).neonBorder(Neon.Cyan, 10.dp, 0.5f)) {
+                            ArtThumb(null, Modifier.fillMaxSize(), size = side, audio = cur?.uri)
+                        }
+                        // floor reflection, fading out before the title
+                        Box(
+                            Modifier.padding(top = 2.dp).size(side, side * 0.1f)
+                                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen; clip = true }
+                                .drawWithContent {
+                                    drawContent()
+                                    drawRect(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.3f), Color.Transparent)), blendMode = BlendMode.DstIn)
+                                },
+                        ) {
+                            ArtThumb(null, Modifier.size(side).graphicsLayer { scaleY = -1f }, size = side, audio = cur?.uri)
+                        }
                     }
+                    NeonText(cur?.title ?: "Nothing playing", Modifier.padding(top = 6.dp), size = 20.sp, weight = FontWeight.Bold)
+                    NeonText(
+                        listOfNotNull(cur?.artist, cur?.album).joinToString(" · ").ifEmpty { "Pick something in the library" },
+                        Modifier.padding(top = 2.dp), size = 12.sp, color = Neon.Dim, glow = null,
+                    )
                 }
             }
-            NeonText(cur?.title ?: "Nothing playing", Modifier.padding(top = 4.dp), size = 19.sp, weight = FontWeight.Bold)
-            NeonText(listOfNotNull(cur?.artist, cur?.album).joinToString(" · ").ifEmpty { "Pick something in the library" }, size = 12.sp, color = Neon.Dim, glow = null)
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             NeonSeekBar(st.positionMs, st.durationMs, actions::seekTo, Modifier.fillMaxWidth())
-            Row(Modifier.fillMaxWidth()) {
-                NeonText(formatTime(st.positionMs), size = 10.sp, color = Neon.Dim, glow = null)
+            Row(Modifier.fillMaxWidth().padding(top = 2.dp)) {
+                NeonText(formatTime(st.positionMs), size = 11.sp, color = Neon.Dim, glow = null)
                 Spacer(Modifier.weight(1f))
-                NeonText("-" + formatTime((st.durationMs - st.positionMs).coerceAtLeast(0)), size = 10.sp, color = Neon.Dim, glow = null)
+                NeonText("-" + formatTime((st.durationMs - st.positionMs).coerceAtLeast(0)), size = 11.sp, color = Neon.Dim, glow = null)
             }
-            Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                NeonButton("SHUF", actions::toggleShuffle, active = st.shuffle)
-                TransportButton(TIcon.PREV, actions::previous, size = 48.dp)
-                TransportButton(if (st.isPlaying) TIcon.PAUSE else TIcon.PLAY, actions::playPause, size = 62.dp, accent = Neon.Orange)
-                TransportButton(TIcon.NEXT, actions::next, size = 48.dp)
-                NeonButton("♪", hooks.onLyrics)
+            // Symmetric deck: two equal side keys around prev / play / next.
+            Row(
+                Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceEvenly,
+            ) {
+                TransportButton(TIcon.SHUFFLE, actions::toggleShuffle, size = 48.dp, active = st.shuffle)
+                TransportButton(TIcon.PREV, actions::previous, size = 52.dp)
+                TransportButton(if (st.isPlaying) TIcon.PAUSE else TIcon.PLAY, actions::playPause, size = 66.dp, accent = Neon.Orange)
+                TransportButton(TIcon.NEXT, actions::next, size = 52.dp)
+                TransportButton(TIcon.LYRICS, hooks.onLyrics, size = 48.dp)
             }
             // Up next: the following songs' covers
             val next = st.queue.withIndex().drop(st.currentIndex + 1).take(12)
             if (next.isNotEmpty()) {
-                Row(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 4.dp)) {
-                    NeonText("UP NEXT", size = 9.sp, color = Neon.Dim, glow = null, spacing = 3.sp)
+                Row(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                    NeonText("UP NEXT", size = 10.sp, color = Neon.Dim, glow = null, spacing = 3.sp)
                 }
-                LazyRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     itemsIndexed(next, key = { _, v -> v.index }) { _, v ->
-                        Column(Modifier.width(64.dp).clickable { actions.playAt(v.index) }) {
-                            ArtThumb(null, size = 64.dp, audio = v.value.uri)
-                            NeonText(v.value.title, size = 8.sp, color = Neon.Dim, glow = null)
+                        Column(
+                            Modifier.width(72.dp).clip(RoundedCornerShape(6.dp))
+                                .clickable(onClickLabel = "Play ${v.value.title}") { actions.playAt(v.index) },
+                        ) {
+                            ArtThumb(null, size = 72.dp, audio = v.value.uri)
+                            NeonText(v.value.title, Modifier.padding(top = 4.dp), size = 10.sp, color = Neon.Ink.copy(alpha = 0.8f), glow = null)
                         }
                     }
                 }
@@ -251,18 +266,28 @@ fun PrismLayout(st: PlayerUiState, actions: PlayerActions, viz: VizState, hooks:
             if (controls && frozenFrames == null) { delay(4500); controls = false }
         }
         val cur = st.current
-        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)))).systemBarsPadding().padding(18.dp)) {
+        // Scrims keep the words readable over the brightest colours without dimming the show.
+        val scrim by androidx.compose.animation.core.animateFloatAsState(if (controls) 1f else 0.75f, label = "scrim")
+        Box(
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(0.42f)
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.45f * scrim), Color.Black.copy(alpha = 0.82f * scrim)))),
+        )
+        AnimatedVisibility(controls, Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) {
+            Box(Modifier.fillMaxWidth().height(140.dp).background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent))))
+        }
+        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().systemBarsPadding().padding(horizontal = 20.dp, vertical = 18.dp)) {
             NeonText(cur?.title ?: "PRISM", size = 20.sp, weight = FontWeight.Bold, color = Color.White, glow = Color.White)
             NeonText(listOfNotNull(cur?.artist, cur?.album).joinToString(" · ").ifEmpty { "Play something to light it up" }, size = 12.sp, color = Color(0xFFD7E3EA), glow = null)
             AnimatedVisibility(controls, enter = fadeIn(), exit = fadeOut()) {
                 Column(Modifier.padding(top = 10.dp)) {
                     NeonSeekBar(st.positionMs, st.durationMs, actions::seekTo, Modifier.fillMaxWidth())
-                    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        TransportButton(TIcon.PREV, actions::previous, size = 44.dp)
-                        TransportButton(if (st.isPlaying) TIcon.PAUSE else TIcon.PLAY, actions::playPause, size = 54.dp, accent = Neon.Orange)
-                        TransportButton(TIcon.NEXT, actions::next, size = 44.dp)
+                    Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        TransportButton(TIcon.PREV, actions::previous, size = 48.dp)
+                        TransportButton(if (st.isPlaying) TIcon.PAUSE else TIcon.PLAY, actions::playPause, size = 58.dp, accent = Neon.Orange)
+                        TransportButton(TIcon.NEXT, actions::next, size = 48.dp)
                         Spacer(Modifier.weight(1f))
-                        NeonButton("♪", hooks.onLyrics)
+                        TransportButton(TIcon.SHUFFLE, actions::toggleShuffle, size = 48.dp, active = st.shuffle)
+                        TransportButton(TIcon.LYRICS, hooks.onLyrics, size = 48.dp)
                     }
                 }
             }
@@ -270,11 +295,16 @@ fun PrismLayout(st: PlayerUiState, actions: PlayerActions, viz: VizState, hooks:
         AnimatedVisibility(controls, Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) {
             LayoutTopBar(hooks, Modifier.systemBarsPadding().padding(12.dp), ink = Color.White)
         }
-        if (!controls) {
+        // The gesture hint shows once, when the layout opens, then gets out of the way.
+        var hint by remember { mutableStateOf(frozenFrames == null) }
+        LaunchedEffect(Unit) { if (hint) { delay(3500); hint = false } }
+        AnimatedVisibility(hint && !controls, Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) {
             NeonText(
-                "TAP FOR CONTROLS · DOUBLE-TAP PLAY/PAUSE",
-                Modifier.align(Alignment.TopCenter).systemBarsPadding().padding(top = 14.dp).graphicsLayer { alpha = 0.45f },
-                size = 8.sp, color = Color.White, glow = null, spacing = 2.sp,
+                "TAP FOR CONTROLS · DOUBLE-TAP TO PAUSE",
+                Modifier.systemBarsPadding().padding(top = 16.dp)
+                    .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(50))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                size = 10.sp, color = Color.White, glow = null, spacing = 1.sp,
             )
         }
     }
