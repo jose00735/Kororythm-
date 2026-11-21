@@ -54,8 +54,31 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** The skins Kororythm can wear. Both are original designs, no film or brand assets. */
-enum class SkinId(val label: String) { NEON("NEON GRID"), HIFI("HI-FI") }
+/** The skins Kororythm can wear. All are original designs, no film or brand assets. */
+enum class SkinId(val label: String, val blurb: String) {
+    NEON("NEON GRID", "Glowing lines on a dark grid"),
+    HIFI("HI-FI", "Brushed aluminium deck, green LCDs"),
+    POD("POD", "Glossy white player, blue highlights"),
+    CHROME("CHROME DECK", "Polished steel, chrome plates, amber LCDs"),
+}
+
+/**
+ * What a skeuomorphic skin is made of (null = the glowing Neon look): background metal,
+ * panel plates, button faces, edges and fittings.
+ */
+class Metal(
+    val bg: List<Color>,
+    /** Strength of the brushed grain on the background (0 = smooth). */
+    val grain: Float,
+    val vignette: Float,
+    val plate: List<Color>,
+    val face: List<Color>,
+    val facePressed: List<Color>,
+    val edge: Color,
+    val screws: Boolean,
+    /** Polished-chrome look: mirror bands and a diagonal sheen on plates. */
+    val chrome: Boolean = false,
+)
 
 /** Colour roles every screen draws with. */
 class Palette(
@@ -76,6 +99,7 @@ class Palette(
     /** Text drawn on dark overlays (plug animations). */
     val overlayInk: Color,
     val font: FontFamily,
+    val metal: Metal? = null,
 )
 
 object Skins {
@@ -90,9 +114,49 @@ object Skins {
         bg = Color(0xFFBFC4CA), panel = Color(0xFFDCE0E4), cyan = Color(0xFF127A5B), orange = Color(0xFFD7461A),
         blue = Color(0xFF2B5FD9), beak = Color(0xFFE8A317), ink = Color(0xFF1C2127), dim = Color(0xFF59616A),
         lcd = Color(0xFF17241B), lcdText = Color(0xFF8DFFB4), overlayInk = Color(0xFFF4F6F8), font = FontFamily.SansSerif,
+        metal = Metal(
+            bg = listOf(Color(0xFFD2D6DB), Color(0xFFBCC1C7), Color(0xFFA9AFB6)), grain = 1f, vignette = 0.18f,
+            plate = listOf(Color(0xFFEDEFF2), Color(0xFFD3D7DC), Color(0xFFC4C9CF)),
+            face = listOf(Color(0xFFF7F8FA), Color(0xFFDADDE1), Color(0xFFB4BAC1)),
+            facePressed = listOf(Color(0xFF9AA1A9), Color(0xFFCDD2D8)),
+            edge = Color(0xFF6E757D), screws = true,
+        ),
     )
 
-    fun of(id: SkinId) = if (id == SkinId.HIFI) hifi else neon
+    /** Glossy white pocket player: smooth white plastic, soft grey, blue selection. */
+    val pod = Palette(
+        bg = Color(0xFFEEF0F3), panel = Color(0xFFFFFFFF), cyan = Color(0xFF1E6FE0), orange = Color(0xFFE5482A),
+        blue = Color(0xFF1E6FE0), beak = Color(0xFFF2B01E), ink = Color(0xFF16191D), dim = Color(0xFF6B737C),
+        lcd = Color(0xFFF9FAFB), lcdText = Color(0xFF1059C9), overlayInk = Color(0xFFF7F8FA), font = FontFamily.SansSerif,
+        metal = Metal(
+            bg = listOf(Color(0xFFF8F9FA), Color(0xFFEBEDF0), Color(0xFFDDE1E5)), grain = 0f, vignette = 0.06f,
+            plate = listOf(Color(0xFFFFFFFF), Color(0xFFF5F6F8), Color(0xFFE8EBEE)),
+            face = listOf(Color(0xFFFFFFFF), Color(0xFFF1F3F5), Color(0xFFDDE1E5)),
+            facePressed = listOf(Color(0xFFD5DAE0), Color(0xFFEDEFF2)),
+            edge = Color(0xFFB4BBC3), screws = false,
+        ),
+    )
+
+    /** Heavy polished-steel deck: mirror chrome plates, rivets, amber LCD windows. */
+    val chrome = Palette(
+        bg = Color(0xFF9BA2AA), panel = Color(0xFFD9DDE2), cyan = Color(0xFF184E74), orange = Color(0xFFD9480F),
+        blue = Color(0xFF1F5FA8), beak = Color(0xFFE8A317), ink = Color(0xFF101316), dim = Color(0xFF3E454D),
+        lcd = Color(0xFF1C1307), lcdText = Color(0xFFFFB347), overlayInk = Color(0xFFF4F6F8), font = FontFamily.SansSerif,
+        metal = Metal(
+            bg = listOf(Color(0xFFC5CAD0), Color(0xFFA3AAB2), Color(0xFF8A929B)), grain = 1.6f, vignette = 0.28f,
+            plate = listOf(Color(0xFFFBFCFD), Color(0xFFC3C9D0), Color(0xFFEEF1F4), Color(0xFF9AA2AB), Color(0xFFD7DCE1)),
+            face = listOf(Color(0xFFFFFFFF), Color(0xFFCBD1D8), Color(0xFFEFF2F5), Color(0xFF959DA6)),
+            facePressed = listOf(Color(0xFF7E868F), Color(0xFFB7BEC6)),
+            edge = Color(0xFF3A4047), screws = true, chrome = true,
+        ),
+    )
+
+    fun of(id: SkinId) = when (id) {
+        SkinId.NEON -> neon
+        SkinId.HIFI -> hifi
+        SkinId.POD -> pod
+        SkinId.CHROME -> chrome
+    }
 }
 
 /** The skin in use. Reads are snapshot state, so switching repaints everything. */
@@ -117,7 +181,9 @@ object SkinState {
 /** Current skin's colours and type (kept under the old name so every screen follows the skin). */
 object Neon {
     private val p: Palette get() = Skins.of(SkinState.current)
-    val isHiFi: Boolean get() = SkinState.current == SkinId.HIFI
+    /** A skeuomorphic skin (Hi-Fi, Pod, Chrome): materials instead of glow. */
+    val isHiFi: Boolean get() = p.metal != null
+    val metal: Metal? get() = p.metal
     val Bg get() = p.bg
     val Panel get() = p.panel
     val Cyan get() = p.cyan
@@ -153,7 +219,7 @@ fun Modifier.neonBorder(color: Color = Neon.Cyan, radius: Dp = 10.dp, strength: 
     val r = CornerRadius(radius.toPx())
     if (Neon.isHiFi) {
         val w = 1.dp.toPx()
-        drawRoundRect(Color(0xFF6E757D).copy(alpha = 0.55f + 0.45f * strength.coerceAtMost(1f)), cornerRadius = r, style = Stroke(w))
+        drawRoundRect((Neon.metal?.edge ?: Color(0xFF6E757D)).copy(alpha = 0.55f + 0.45f * strength.coerceAtMost(1f)), cornerRadius = r, style = Stroke(w))
         drawRoundRect(
             Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.85f), Color.Transparent, Color.Black.copy(alpha = 0.22f))),
             topLeft = Offset(w, w), size = Size(size.width - 2 * w, size.height - 2 * w),
@@ -170,10 +236,9 @@ fun Modifier.neonBorder(color: Color = Neon.Cyan, radius: Dp = 10.dp, strength: 
 }
 
 /** Hi-Fi chrome: raised (or pressed-in) brushed button face. */
-fun hifiFace(pressed: Boolean): Brush = if (pressed) {
-    Brush.verticalGradient(listOf(Color(0xFF9AA1A9), Color(0xFFCDD2D8)))
-} else {
-    Brush.verticalGradient(listOf(Color(0xFFF7F8FA), Color(0xFFDADDE1), Color(0xFFB4BAC1)))
+fun hifiFace(pressed: Boolean): Brush {
+    val m = Neon.metal ?: Skins.hifi.metal!!
+    return Brush.verticalGradient(if (pressed) m.facePressed else m.face)
 }
 
 @Composable
@@ -247,8 +312,13 @@ fun NeonPanel(
     shadeContent: @Composable RowScope.() -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val plate = if (Neon.isHiFi) {
-        Modifier.background(Brush.verticalGradient(listOf(Color(0xFFEDEFF2), Color(0xFFD3D7DC), Color(0xFFC4C9CF))), RoundedCornerShape(10.dp)).drawBehind { drawScrews() }
+    val metal = Neon.metal
+    val plate = if (metal != null) {
+        Modifier.background(Brush.verticalGradient(metal.plate), RoundedCornerShape(10.dp))
+            .drawBehind {
+                if (metal.chrome) drawChromeSheen(10.dp.toPx())
+                if (metal.screws) drawScrews()
+            }
     } else {
         Modifier.background(Neon.Panel, RoundedCornerShape(10.dp))
     }
@@ -324,27 +394,52 @@ fun GridBackground(boot: Float, modifier: Modifier = Modifier) {
 /** Hi-Fi background: brushed aluminium with fine horizontal grain and a soft vignette. */
 @Composable
 fun BrushedMetal(modifier: Modifier = Modifier) {
+    val m = Neon.metal ?: Skins.hifi.metal!!
     Canvas(modifier.fillMaxSize()) {
-        drawRect(Brush.verticalGradient(listOf(Color(0xFFD2D6DB), Color(0xFFBCC1C7), Color(0xFFA9AFB6))))
-        val step = 2.dp.toPx()
-        var y = 0f
-        var i = 0
-        while (y < size.height) {
-            // deterministic pseudo-random grain
-            val h = ((i * 1103515245 + 12345) ushr 8) and 0xFF
-            val light = h % 2 == 0
-            val a = 0.025f + (h % 7) * 0.008f
-            drawLine(if (light) Color.White.copy(alpha = a) else Color.Black.copy(alpha = a * 0.7f), Offset(0f, y), Offset(size.width, y), 1f)
-            y += step
-            i++
+        drawRect(Brush.verticalGradient(m.bg))
+        if (m.grain > 0f) {
+            val step = 2.dp.toPx()
+            var y = 0f
+            var i = 0
+            while (y < size.height) {
+                // deterministic pseudo-random grain
+                val h = ((i * 1103515245 + 12345) ushr 8) and 0xFF
+                val light = h % 2 == 0
+                val a = (0.025f + (h % 7) * 0.008f) * m.grain
+                drawLine(if (light) Color.White.copy(alpha = a) else Color.Black.copy(alpha = a * 0.7f), Offset(0f, y), Offset(size.width, y), 1f)
+                y += step
+                i++
+            }
+        }
+        if (m.chrome) {
+            // broad soft reflections of a studio light across polished steel
+            drawRect(
+                Brush.linearGradient(
+                    listOf(Color.Transparent, Color.White.copy(alpha = 0.22f), Color.Transparent, Color.White.copy(alpha = 0.12f), Color.Transparent),
+                    start = Offset(0f, 0f), end = Offset(size.width, size.height),
+                ),
+            )
         }
         drawRect(
             Brush.radialGradient(
-                listOf(Color.Transparent, Color.Black.copy(alpha = 0.18f)),
+                listOf(Color.Transparent, Color.Black.copy(alpha = m.vignette)),
                 center = Offset(size.width / 2, size.height * 0.4f), radius = size.maxDimension * 0.75f,
             ),
         )
     }
+}
+
+/** Chrome plates: a mirror-like diagonal sheen and a bright top edge. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawChromeSheen(radius: Float) {
+    drawRoundRect(
+        Brush.linearGradient(
+            0f to Color.Transparent, 0.35f to Color.White.copy(alpha = 0.0f), 0.42f to Color.White.copy(alpha = 0.55f),
+            0.47f to Color.White.copy(alpha = 0.05f), 0.6f to Color.Transparent, 0.78f to Color.White.copy(alpha = 0.25f), 0.84f to Color.Transparent,
+            start = Offset(0f, 0f), end = Offset(size.width, size.height * 1.6f),
+        ),
+        cornerRadius = CornerRadius(radius),
+    )
+    drawLine(Color.White.copy(alpha = 0.9f), Offset(radius, 1.2f), Offset(size.width - radius, 1.2f), 1.5f)
 }
 
 /** Four small slotted screws in the corners of a Hi-Fi panel. */

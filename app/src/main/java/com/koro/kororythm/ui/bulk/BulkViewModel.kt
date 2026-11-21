@@ -75,8 +75,9 @@ class BulkViewModel(app: Application) : AndroidViewModel(app) {
 
     fun addTo(p: PlaylistSummary) = viewModelScope.launch {
         val ids = selectedInOrder()
-        dao.appendToPlaylist(p.id, ids)
-        set { it.copy(choosingList = false, message = "Added ${ids.size} songs to \"${p.name}\"") }
+        val added = dao.appendToPlaylist(p.id, ids)
+        val skipped = ids.size - added
+        set { it.copy(choosingList = false, message = "Added $added songs to \"${p.name}\"" + if (skipped > 0) " · $skipped were already in it" else "") }
     }
 
     fun createList() = viewModelScope.launch {

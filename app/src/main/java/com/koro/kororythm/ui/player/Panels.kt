@@ -355,7 +355,7 @@ fun PlaylistPanel(
 /** Small header: parrot mark + name. */
 @Composable
 fun Header(output: OutputDevice, modifier: Modifier = Modifier, onOpenLibrary: () -> Unit = {}) {
-    // Tapping the skin button switches Neon Grid <-> Hi-Fi; the choice is remembered.
+    // ◐ STYLE opens the skin and layout chooser; the choice is remembered.
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Canvas(Modifier.size(34.dp)) { drawParrot(Offset.Zero, size.minDimension) }
         Spacer(Modifier.width(8.dp))
@@ -369,7 +369,7 @@ fun Header(output: OutputDevice, modifier: Modifier = Modifier, onOpenLibrary: (
             }
             Spacer(Modifier.width(6.dp))
         }
-        NeonButton("SKIN", { SkinState.next() })
+        NeonButton("◐ STYLE", { StyleSheetState.open = true })
         Spacer(Modifier.width(6.dp))
         NeonButton("LIBRARY", onOpenLibrary, accent = Neon.Orange)
     }

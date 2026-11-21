@@ -130,6 +130,7 @@ fun TrackMenu(t: TrackEntity, cb: LibraryCallbacks) {
         MenuItem("▶", "Play next / add to queue") { cb.enqueue(listOf(t)); cb.menu(null) }
         MenuItem("☰", "Add to playlist…") { cb.chooseList(listOf(t.id)) }
         MenuItem("✎", "Edit tags & file name") { cb.menu(null); cb.editTags(t) }
+        MenuItem("↗", "Share…", "Send the audio file to another app or person") { cb.share(t) }
         MenuItem("♪", "Lyrics", "Find synced lyrics, save them into the file") { cb.lyrics(t) }
         MenuItem("✕", "Delete file…", "Removes the song from your phone and the library", color = Neon.Orange) { cb.askDelete(t) }
         if (isLossy(t)) {

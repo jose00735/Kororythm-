@@ -16,6 +16,7 @@ class KororythmApp : Application() {
         super.onCreate()
         EqStore.init(this)
         SkinState.init(this)
+        com.koro.kororythm.ui.player.LayoutState.init(this)
         com.koro.kororythm.dj.DjStore.init(this)
         Library.init(this)
         ImportWorker.schedulePeriodic(this)

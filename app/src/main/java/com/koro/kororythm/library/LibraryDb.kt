@@ -245,15 +245,26 @@ abstract class LibraryDao {
     }
 
     @Transaction
-    open suspend fun appendToPlaylist(id: Long, trackIds: List<Long>) {
+    @Query("SELECT trackId FROM playlist_tracks WHERE playlistId = :id")
+    abstract suspend fun playlistTrackIds(id: Long): List<Long>
+
+    /**
+     * Adds songs at the end, skipping any already in the playlist (and repeats in [trackIds]):
+     * a file is never in the same playlist twice. Returns how many were added.
+     */
+    @Transaction
+    open suspend fun appendToPlaylist(id: Long, trackIds: List<Long>): Int {
+        val have = playlistTrackIds(id).toHashSet()
+        val add = trackIds.distinct().filter { it !in have }
         val start = lastPosition(id) + 1
-        insertPlaylistTracks(trackIds.mapIndexed { i, t -> PlaylistTrack(id, start + i, t) })
+        insertPlaylistTracks(add.mapIndexed { i, t -> PlaylistTrack(id, start + i, t) })
+        return add.size
     }
 
     @Transaction
     open suspend fun createPlaylist(name: String, trackIds: List<Long>): Long {
         val id = insertPlaylist(PlaylistEntity(name = name, createdAt = System.currentTimeMillis()))
-        insertPlaylistTracks(trackIds.mapIndexed { i, t -> PlaylistTrack(id, i, t) })
+        insertPlaylistTracks(trackIds.distinct().mapIndexed { i, t -> PlaylistTrack(id, i, t) })
         return id
     }
 

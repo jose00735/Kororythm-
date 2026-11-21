@@ -75,7 +75,14 @@ fun PlayerScreen(
     }
 
     Box(Modifier.fillMaxSize()) {
-        PlayerLayout(st, eq, output, viz, vm, onAddFiles, boot.value, onOpenLibrary, onEditTags, onOpenDj, onLyrics, onSaveQueue)
+        val hooks = LayoutHooks(onOpenLibrary = onOpenLibrary, onLyrics = onLyrics)
+        when (LayoutState.current) {
+            PlayerLayoutId.CLASSIC -> PlayerLayout(st, eq, output, viz, vm, onAddFiles, boot.value, onOpenLibrary, onEditTags, onOpenDj, onLyrics, onSaveQueue)
+            PlayerLayoutId.COVER -> CoverLayout(st, vm, hooks)
+            PlayerLayoutId.POD -> PodLayout(st, vm, hooks)
+            PlayerLayoutId.PRISM -> PrismLayout(st, vm, viz, hooks)
+        }
+        StyleSheet()
         overlay?.let { e ->
             key(e) { DeviceOverlay(e) { if (overlay === e) overlay = null } }
         }

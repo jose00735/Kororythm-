@@ -17,6 +17,17 @@ An Android music player for FLAC and MP3 with a classic Winamp layout, two skins
 
 Built with Kotlin, Jetpack Compose and AndroidX Media3. Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## New in v1.5
+
+- **Layouts** — tap **◐ STYLE** on the player to switch between four main-screen layouts:
+  - **Classic** — the original Winamp deck.
+  - **Cover** — big album art with reflection over a blurred backdrop, swipe for next/previous, an *Up next* strip.
+  - **Pod** — classic iPod: screen plus click wheel. Spin the wheel for volume, tap the centre to scrub (spin to seek), MENU for the queue.
+  - **Prism** — a full-screen visualizer inspired by the Xbox 360 music visualizer: radial rainbow streaks and chrome droplets driven by the music (video-feedback engine, no external assets). Tap to show controls, double-tap to play/pause.
+- **Two new skins** — **Pod** (white and silver) and **Chrome Deck** (skeuomorphic brushed chrome with screws and sheen).
+- **Share** — long-press a song in the Library → *Share…* to send the audio file to any app.
+- **No duplicates in playlists** — adding a song that is already in a playlist is skipped and reported.
+
 ## New in v1.4
 
 **Bulk edit** (hidden panel: press **Volume Up, Volume Down, Volume Up** within 2 seconds anywhere in the app; the volume still changes as usual)

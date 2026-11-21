@@ -95,6 +95,7 @@ open class LibraryCallbacks {
     open fun cancelDelete() {}
     open fun removeMissing() {}
     open fun dismissMissing() {}
+    open fun share(t: TrackEntity) {}
 }
 
 @Composable
@@ -113,6 +114,7 @@ fun LibraryScreen(
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     BackHandler { if (ui.detail != null) vm.closeDetail() else onBack() }
+    val context = androidx.compose.ui.platform.LocalContext.current
     val cb = object : LibraryCallbacks() {
         override fun back() = onBack()
         override fun tab(t: LibTab) = vm.setTab(t)
@@ -159,6 +161,10 @@ fun LibraryScreen(
         override fun cancelDelete() = vm.cancelDelete()
         override fun removeMissing() { vm.removeMissing() }
         override fun dismissMissing() = vm.dismissMissing()
+        override fun share(t: TrackEntity) {
+            vm.openMenu(null)
+            com.koro.kororythm.library.ShareSong.share(context, t)
+        }
     }
     val deleteConsent = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult(),
@@ -166,7 +172,6 @@ fun LibraryScreen(
     androidx.compose.runtime.LaunchedEffect(ui.deleteConsent) {
         ui.deleteConsent?.let { deleteConsent.launch(androidx.activity.result.IntentSenderRequest.Builder(it).build()) }
     }
-    val context = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.runtime.LaunchedEffect(ui.toast) {
         ui.toast?.let { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show(); vm.toastShown() }
     }

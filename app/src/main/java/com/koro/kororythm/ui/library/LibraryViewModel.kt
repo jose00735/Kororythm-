@@ -259,8 +259,18 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
     fun addTo(playlist: PlaylistSummary) = viewModelScope.launch {
         val ids = overlay.value.addTo ?: return@launch
-        dao.appendToPlaylist(playlist.id, ids)
-        ov { it.copy(addTo = null, toast = "Added ${ids.size} to ${playlist.name}") }
+        val added = dao.appendToPlaylist(playlist.id, ids)
+        val skipped = ids.distinct().size - added
+        ov {
+            it.copy(
+                addTo = null,
+                toast = when {
+                    added == 0 -> "Already in ${playlist.name}"
+                    skipped > 0 -> "Added $added to ${playlist.name} · $skipped already there"
+                    else -> "Added $added to ${playlist.name}"
+                },
+            )
+        }
         refreshPlaylistDetail(playlist.id)
     }
 
