@@ -78,6 +78,9 @@ class V15ScreenshotTest {
 
     @Test fun coverStage() = skins("110_cover", SkinId.NEON, SkinId.POD, SkinId.CHROME) { CoverLayout(state, NoActions, LayoutHooks()) }
 
+    /** Cover flow caught 40% of the way to the next song. */
+    @Test fun coverFlowMidGlide() = skins("120_cover_glide", SkinId.NEON, SkinId.CHROME) { CoverLayout(state, NoActions, LayoutHooks(), previewFlow = state.currentIndex + 0.4f) }
+
     @Test fun podNowPlaying() = skins("111_pod", SkinId.POD, SkinId.NEON, SkinId.CHROME) { PodLayout(state, NoActions, LayoutHooks()) }
 
     @Test fun podMenuAndVolume() {

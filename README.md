@@ -17,6 +17,12 @@ An Android music player for FLAC and MP3 with a classic Winamp layout, two skins
 
 Built with Kotlin, Jetpack Compose and AndroidX Media3. Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## New in v1.5.2 — Cover Flow
+
+- **Cover Stage is now a real cover flow**: the whole queue sits on one strip, the song in the middle faces you and its neighbours turn towards it.
+- Every song change glides: swipe and fling through covers (with a soft tick per cover), or let next / previous, the library or the end of a track slide the strip with a spring. Long jumps skip ahead and only glide the last few covers.
+- Tap the middle cover to play / pause, tap a side cover to play it. The backdrop cross-fades and the title slides in from the side the new cover came from.
+
 ## New in v1.5.1 — layout polish
 
 - **Cover**: the art, its reflection and the song name now sit together as one block; the deck is symmetric (shuffle · prev · play · next · lyrics) with 48 dp+ keys; bigger, readable *Up next* covers.

@@ -1,6 +1,12 @@
 package com.koro.kororythm.ui.player
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
@@ -99,67 +105,44 @@ fun LayoutTopBar(hooks: LayoutHooks, modifier: Modifier = Modifier, ink: Color =
 // ============================================================================================
 
 @Composable
-fun CoverLayout(st: PlayerUiState, actions: PlayerActions, hooks: LayoutHooks) {
+fun CoverLayout(st: PlayerUiState, actions: PlayerActions, hooks: LayoutHooks, previewFlow: Float? = null) {
     val cur = st.current
-    Box(Modifier.fillMaxSize().background(Neon.Bg)) {
-        // Blurred, darkened copy of the cover as the backdrop (Android 12+ blurs; older phones get the dim copy).
-        if (cur != null) {
-            ArtThumb(null, Modifier.fillMaxSize().blur(48.dp).graphicsLayer { alpha = 0.55f }, size = 600.dp, audio = cur.uri)
+    BoxWithConstraints(Modifier.fillMaxSize().background(Neon.Bg)) {
+        val screenW = maxWidth
+        // Blurred, darkened copy of the cover as the backdrop; it cross-fades with the song
+        // (Android 12+ blurs; older phones get the dim copy).
+        Crossfade(cur?.uri, animationSpec = tween(700), label = "backdrop") { uri ->
+            if (uri != null) ArtThumb(null, Modifier.fillMaxSize().blur(48.dp).graphicsLayer { alpha = 0.55f }, size = 600.dp, audio = uri)
         }
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Neon.Bg.copy(alpha = 0.35f), Neon.Bg.copy(alpha = 0.92f)))))
         Column(Modifier.fillMaxSize().systemBarsPadding().padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             LayoutTopBar(hooks)
             Spacer(Modifier.height(14.dp))
-            // Swipe the cover for next / previous; tap it to play / pause.
-            val drag = remember { Animatable(0f) }
-            val scope = rememberCoroutineScope()
             BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                // Cover, its reflection and the song's name read as one object; the slack goes around it.
-                val side = minOf(maxWidth, (maxHeight - 64.dp) / 1.12f)
+                // Flow, reflections and the song's name read as one object; the slack goes around it.
+                // The middle cover leaves room on each side for its neighbours to show.
+                val side = minOf(maxWidth * 0.76f, (maxHeight - 64.dp) / 1.2f)
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Column(
-                        Modifier.graphicsLayer {
-                            translationX = drag.value
-                            rotationY = -drag.value / 40f
-                            alpha = 1f - (abs(drag.value) / 900f).coerceAtMost(0.6f)
-                        }
-                            .pointerInput(st.currentIndex) {
-                                detectHorizontalDragGestures(
-                                    onDragEnd = {
-                                        scope.launch {
-                                            when {
-                                                drag.value < -160f -> actions.next()
-                                                drag.value > 160f -> actions.previous()
-                                            }
-                                            drag.animateTo(0f, spring(0.7f))
-                                        }
-                                    },
-                                ) { ch, dx -> ch.consume(); scope.launch { drag.snapTo(drag.value + dx) } }
-                            }
-                            .pointerInput(Unit) { detectTapGestures(onTap = { actions.playPause() }) }
-                            .semantics { contentDescription = "Album art. Tap to play or pause, swipe for next or previous" },
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Box(Modifier.size(side).clip(RoundedCornerShape(10.dp)).neonBorder(Neon.Cyan, 10.dp, 0.5f)) {
-                            ArtThumb(null, Modifier.fillMaxSize(), size = side, audio = cur?.uri)
-                        }
-                        // floor reflection, fading out before the title
-                        Box(
-                            Modifier.padding(top = 2.dp).size(side, side * 0.1f)
-                                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen; clip = true }
-                                .drawWithContent {
-                                    drawContent()
-                                    drawRect(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.3f), Color.Transparent)), blendMode = BlendMode.DstIn)
-                                },
-                        ) {
-                            ArtThumb(null, Modifier.size(side).graphicsLayer { scaleY = -1f }, size = side, audio = cur?.uri)
+                    CoverFlow(st, actions, side, screenW, previewPos = previewFlow)
+                    // The name slides in from the side the new cover came from.
+                    AnimatedContent(
+                        targetState = st.currentIndex,
+                        transitionSpec = {
+                            val dir = if (targetState >= initialState) 1 else -1
+                            (slideInHorizontally(tween(360)) { it / 5 * dir } + fadeIn(tween(360)))
+                                .togetherWith(slideOutHorizontally(tween(260)) { -it / 5 * dir } + fadeOut(tween(200)))
+                        },
+                        label = "title",
+                    ) { idx ->
+                        val t = st.queue.getOrNull(idx)
+                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                            NeonText(t?.title ?: "Nothing playing", size = 20.sp, weight = FontWeight.Bold)
+                            NeonText(
+                                listOfNotNull(t?.artist, t?.album).joinToString(" · ").ifEmpty { "Pick something in the library" },
+                                Modifier.padding(top = 2.dp), size = 12.sp, color = Neon.Dim, glow = null,
+                            )
                         }
                     }
-                    NeonText(cur?.title ?: "Nothing playing", Modifier.padding(top = 6.dp), size = 20.sp, weight = FontWeight.Bold)
-                    NeonText(
-                        listOfNotNull(cur?.artist, cur?.album).joinToString(" · ").ifEmpty { "Pick something in the library" },
-                        Modifier.padding(top = 2.dp), size = 12.sp, color = Neon.Dim, glow = null,
-                    )
                 }
             }
             Spacer(Modifier.height(12.dp))
