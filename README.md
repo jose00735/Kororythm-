@@ -17,6 +17,12 @@ An Android music player for FLAC and MP3 with a classic Winamp layout, two skins
 
 Built with Kotlin, Jetpack Compose and AndroidX Media3. Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## New in v1.6 — Play next / Add to end
+
+- Tap **+** on a song (or **+ QUEUE** on an album or playlist) and choose **Play next** (right after the current song) or **Add to end** (after everything already lined up). The song's ⋮ menu has both too.
+- Several *Play next* songs keep the order you picked them.
+- The **Playlist** window now shows where each song came from: **FROM <list>** for the album or playlist you started, and **QUEUED BY YOU · PLAYS NEXT / AT THE END** for songs added on the fly. The marks survive a restart.
+
 ## New in v1.5.2 — Cover Flow
 
 - **Cover Stage is now a real cover flow**: the whole queue sits on one strip, the song in the middle faces you and its neighbours turn towards it.

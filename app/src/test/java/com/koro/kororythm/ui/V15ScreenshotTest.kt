@@ -29,6 +29,11 @@ import com.koro.kororythm.ui.skin.SkinId
 import com.koro.kororythm.ui.skin.SkinState
 import com.koro.kororythm.ui.viz.VizState
 import org.junit.After
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
+import com.koro.kororythm.ui.player.PlaylistPanel
+import com.koro.kororythm.ui.skin.Neon
 import org.junit.Rule
 import org.junit.Test
 import kotlin.math.exp
@@ -77,6 +82,22 @@ class V15ScreenshotTest {
     }
 
     @Test fun coverStage() = skins("110_cover", SkinId.NEON, SkinId.POD, SkinId.CHROME) { CoverLayout(state, NoActions, LayoutHooks()) }
+
+    /** Playlist window: the started list, two songs queued to play next, one added at the end. */
+    @Test fun queuedOnTheFly() {
+        val q = listOf(
+            queue[0], queue[1],
+            queue[4].copy(uri = "q1", queued = true), queue[2].copy(uri = "q2", queued = true),
+            queue[3], queue[5],
+            queue[0].copy(uri = "q3", title = "Neon Runway (Extended)", queued = true),
+        )
+        val st = state.copy(queue = q, source = "Night Drive")
+        skins("121_queue_sections", SkinId.NEON, SkinId.POD) {
+            Box(Modifier.fillMaxSize().background(Neon.Bg).padding(12.dp)) {
+                PlaylistPanel(st, NoActions, onAddFiles = {}, shaded = false, onToggleShade = {})
+            }
+        }
+    }
 
     /** Cover flow caught 40% of the way to the next song. */
     @Test fun coverFlowMidGlide() = skins("120_cover_glide", SkinId.NEON, SkinId.CHROME) { CoverLayout(state, NoActions, LayoutHooks(), previewFlow = state.currentIndex + 0.4f) }

@@ -33,6 +33,8 @@ data class PlayerUiState(
     val currentIndex: Int = -1,
     val shuffle: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
+    /** Name of the list that was started (album, playlist…), shown above its songs. */
+    val source: String? = null,
 ) {
     val current: TrackInfo? get() = queue.getOrNull(currentIndex)
     val totalMs: Long get() = queue.sumOf { it.durationMs }
@@ -48,6 +50,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app), PlayerActions {
     private val controllerReady = kotlinx.coroutines.CompletableDeferred<MediaController>()
     private var ticker: Job? = null
     private val prefs = app.getSharedPreferences("queue", Context.MODE_PRIVATE)
+    private var source: String? = prefs.getString("source", null)
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = refresh()
@@ -78,6 +81,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app), PlayerActions {
             currentIndex = if (items.isEmpty()) -1 else c.currentMediaItemIndex,
             shuffle = c.shuffleModeEnabled,
             repeatMode = c.repeatMode,
+            source = source,
         )
     }
 
@@ -150,23 +154,33 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app), PlayerActions {
         }
     }
 
-    override fun playTracks(tracks: List<TrackInfo>, start: Int) {
+    override fun playTracks(tracks: List<TrackInfo>, start: Int, source: String?) {
         if (tracks.isEmpty()) return
         viewModelScope.launch {
             val c = controllerReady.await()
-            c.setMediaItems(tracks.map { it.toMediaItem() }, start.coerceIn(0, tracks.lastIndex), 0)
+            this@PlayerViewModel.source = source
+            prefs.edit().putString("source", source).apply()
+            c.setMediaItems(tracks.map { it.copy(queued = false).toMediaItem() }, start.coerceIn(0, tracks.lastIndex), 0)
             c.prepare()
             c.play()
             saveQueue()
         }
     }
 
-    override fun enqueue(tracks: List<TrackInfo>) {
+    override fun enqueue(tracks: List<TrackInfo>, next: Boolean) {
         if (tracks.isEmpty()) return
         viewModelScope.launch {
             val c = controllerReady.await()
             val wasEmpty = c.mediaItemCount == 0
-            c.addMediaItems(tracks.map { it.toMediaItem() })
+            val items = tracks.map { it.copy(queued = true).toMediaItem() }
+            if (next && !wasEmpty) {
+                // Right after the current song, behind songs already queued this way.
+                var at = c.currentMediaItemIndex + 1
+                while (at < c.mediaItemCount && TrackInfo.fromMediaItem(c.getMediaItemAt(at)).queued) at++
+                c.addMediaItems(at, items)
+            } else {
+                c.addMediaItems(items)
+            }
             if (wasEmpty) c.prepare()
             saveQueue()
         }
@@ -189,7 +203,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app), PlayerActions {
     override fun fileRewritten(oldUri: String, info: TrackInfo) {
         val c = controller ?: return
         for (i in 0 until c.mediaItemCount) {
-            if (c.getMediaItemAt(i).mediaId == oldUri) c.replaceMediaItem(i, info.toMediaItem())
+            val old = c.getMediaItemAt(i)
+            if (old.mediaId == oldUri) c.replaceMediaItem(i, info.copy(queued = TrackInfo.fromMediaItem(old).queued).toMediaItem())
         }
         rewriting?.let { (uri, pos, wasPlaying) ->
             if (uri == oldUri) {
@@ -213,12 +228,17 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app), PlayerActions {
     }
 
     override fun clear() {
+        source = null; prefs.edit().remove("source").apply()
         controller?.run { stop(); clearMediaItems() }; saveQueue()
     }
 
     private fun saveQueue() {
         val c = controller ?: return
-        val uris = (0 until c.mediaItemCount).joinToString("\n") { c.getMediaItemAt(it).mediaId }
+        // Songs queued on the fly are saved with a "+" so they come back marked.
+        val uris = (0 until c.mediaItemCount).joinToString("\n") {
+            val item = c.getMediaItemAt(it)
+            (if (TrackInfo.fromMediaItem(item).queued) "+" else "") + item.mediaId
+        }
         prefs.edit().putString("uris", uris).apply()
     }
 
@@ -226,9 +246,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app), PlayerActions {
         val app = getApplication<Application>()
         val saved = prefs.getString("uris", null)?.lines()?.filter { it.isNotBlank() } ?: return
         val infos = withContext(Dispatchers.IO) {
-            saved.mapNotNull { s ->
+            saved.mapNotNull { line ->
+                val queued = line.startsWith("+")
+                val s = line.removePrefix("+")
                 // Library tracks come straight from the database; others are re-read if still readable.
-                Library.dao.byUri(s)?.toTrackInfo() ?: Uri.parse(s).takeIf { canRead(app, it) }?.let { TrackInfo.read(app, it) }
+                (Library.dao.byUri(s)?.toTrackInfo() ?: Uri.parse(s).takeIf { canRead(app, it) }?.let { TrackInfo.read(app, it) })
+                    ?.copy(queued = queued)
             }
         }
         if (infos.isEmpty()) return

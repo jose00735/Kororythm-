@@ -25,6 +25,7 @@ import androidx.compose.runtime.collectAsState
 import com.koro.kororythm.AudioBus
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -296,8 +297,14 @@ fun PlaylistPanel(
         shadeContent = { NeonText(summary, size = 11.sp, color = Neon.Cyan) },
     ) {
         val listState = rememberLazyListState()
-        LaunchedEffect(st.currentIndex) {
-            if (st.currentIndex >= 0) listState.animateScrollToItem(st.currentIndex)
+        // The list is split into runs: songs from the list you started, and songs you queued on
+        // the fly (play next / add to end). Each run gets a header, so the two read apart.
+        val runs = remember(st.queue) { queueRuns(st.queue) }
+        LaunchedEffect(st.currentIndex, runs) {
+            if (st.currentIndex >= 0) {
+                val headersBefore = runs.count { it.first <= st.currentIndex }
+                listState.animateScrollToItem((st.currentIndex + headersBefore - 1).coerceAtLeast(0))
+            }
         }
         var flow by rememberSaveable { mutableStateOf(false) }
         if (flow && st.queue.size > 1) {
@@ -314,24 +321,11 @@ fun PlaylistPanel(
             }
         } else {
             LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false).padding(top = 4.dp), state = listState) {
-                itemsIndexed(st.queue, key = { i, t -> "$i:${t.uri}" }) { i, t ->
-                    val current = i == st.currentIndex
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .background(if (current) Neon.Orange.copy(alpha = 0.12f) else Color.Transparent, RoundedCornerShape(4.dp))
-                            .combinedClickable(onClick = { vm.playAt(i) }, onLongClick = { vm.removeAt(i) })
-                            .padding(horizontal = 6.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        val c = if (current) Neon.Orange else Neon.Ink
-                        NeonText("${i + 1}.", Modifier.width(30.dp), size = 11.sp, color = Neon.Dim, glow = null)
-                        Column(Modifier.weight(1f)) {
-                            NeonText(t.title, size = 12.sp, color = c, glow = if (current) Neon.Orange else null)
-                            t.artist?.let { NeonText(it, size = 10.sp, color = Neon.Dim, glow = null) }
-                        }
-                        NeonText(t.codec ?: "", Modifier.padding(horizontal = 6.dp), size = 9.sp, color = Neon.Dim, glow = null)
-                        NeonText(formatTime(t.durationMs), size = 11.sp, color = c, glow = null)
+                runs.forEach { run ->
+                    item(key = "h${run.first}") { QueueHeader(st, run) }
+                    for (i in run) {
+                        val t = st.queue[i]
+                        item(key = "$i:${t.uri}") { QueueRow(st, vm, i, t) }
                     }
                 }
             }
@@ -349,6 +343,57 @@ fun PlaylistPanel(
             NeonText(summary, size = 10.sp, color = Neon.Dim, glow = null)
         }
         NeonText("Long-press a track to remove it", size = 9.sp, color = Neon.Dim.copy(alpha = 0.7f), glow = null)
+    }
+}
+
+/** Consecutive index ranges of the queue that share an origin (queued on the fly or not). */
+internal fun queueRuns(q: List<com.koro.kororythm.playback.TrackInfo>): List<IntRange> {
+    val out = mutableListOf<IntRange>()
+    var start = 0
+    for (i in 1..q.size) {
+        if (i == q.size || q[i].queued != q[start].queued) { if (start < i) out += start until i; start = i }
+    }
+    return out
+}
+
+@Composable
+private fun QueueHeader(st: PlayerUiState, run: IntRange) {
+    val queued = st.queue[run.first].queued
+    val n = run.last - run.first + 1
+    val label = when {
+        !queued -> "FROM " + (st.source ?: "the playlist").uppercase()
+        // A queued run sitting after the started list was added "to the end".
+        run.first > 0 && run.last == st.queue.lastIndex && !st.queue[run.first - 1].queued -> "QUEUED BY YOU · AT THE END"
+        else -> "QUEUED BY YOU · PLAYS NEXT"
+    }
+    val c = if (queued) Neon.Orange else Neon.Cyan
+    Row(Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(width = 3.dp, height = 12.dp).background(c, RoundedCornerShape(2.dp)))
+        NeonText(label, Modifier.padding(start = 6.dp).weight(1f), size = 9.sp, color = c, glow = null, spacing = 2.sp, weight = FontWeight.Bold)
+        NeonText(if (n == 1) "1 SONG" else "$n SONGS", size = 9.sp, color = Neon.Dim, glow = null)
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun QueueRow(st: PlayerUiState, vm: PlayerActions, i: Int, t: com.koro.kororythm.playback.TrackInfo) {
+    val current = i == st.currentIndex
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(if (current) Neon.Orange.copy(alpha = 0.12f) else Color.Transparent, RoundedCornerShape(4.dp))
+            .combinedClickable(onClick = { vm.playAt(i) }, onLongClick = { vm.removeAt(i) })
+            .padding(horizontal = 6.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val c = if (current) Neon.Orange else Neon.Ink
+        NeonText("${i + 1}.", Modifier.width(30.dp), size = 11.sp, color = Neon.Dim, glow = null)
+        Column(Modifier.weight(1f)) {
+            NeonText(t.title, size = 12.sp, color = c, glow = if (current) Neon.Orange else null)
+            t.artist?.let { NeonText(it, size = 10.sp, color = Neon.Dim, glow = null) }
+        }
+        NeonText(t.codec ?: "", Modifier.padding(horizontal = 6.dp), size = 9.sp, color = Neon.Dim, glow = null)
+        NeonText(formatTime(t.durationMs), size = 11.sp, color = c, glow = null)
     }
 }
 

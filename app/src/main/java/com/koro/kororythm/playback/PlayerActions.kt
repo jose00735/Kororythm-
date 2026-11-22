@@ -21,11 +21,14 @@ interface PlayerActions {
     fun applyPreset(name: String)
     fun resetEq()
 
-    /** Replaces the queue with [tracks] and plays from [start] (library "play"). */
-    fun playTracks(tracks: List<TrackInfo>, start: Int = 0) {}
+    /** Replaces the queue with [tracks] and plays from [start] (library "play"); [source] names the list. */
+    fun playTracks(tracks: List<TrackInfo>, start: Int = 0, source: String? = null) {}
 
-    /** Adds [tracks] to the end of the queue (library "add"). */
-    fun enqueue(tracks: List<TrackInfo>) {}
+    /**
+     * Queues [tracks] on the fly. [next] = play right after the current song (after any songs
+     * already queued that way, so they keep the order you picked them); otherwise at the very end.
+     */
+    fun enqueue(tracks: List<TrackInfo>, next: Boolean = false) {}
 
     /** Turntable pitch fader: speed 0.92..1.08; with key lock the pitch stays put. */
     fun setTempo(speed: Float, keyLock: Boolean) {}

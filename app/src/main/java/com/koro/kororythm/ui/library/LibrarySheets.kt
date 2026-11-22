@@ -127,7 +127,8 @@ fun TrackMenu(t: TrackEntity, cb: LibraryCallbacks) {
             }
         }
         Spacer(Modifier.height(6.dp))
-        MenuItem("▶", "Play next / add to queue") { cb.enqueue(listOf(t)); cb.menu(null) }
+        MenuItem("▶", "Play next", "Right after the song that's playing") { cb.menu(null); cb.enqueue(listOf(t), next = true) }
+        MenuItem("↓", "Add to end of queue", "After everything that's already lined up") { cb.menu(null); cb.enqueue(listOf(t), next = false) }
         MenuItem("☰", "Add to playlist…") { cb.chooseList(listOf(t.id)) }
         MenuItem("✎", "Edit tags & file name") { cb.menu(null); cb.editTags(t) }
         MenuItem("↗", "Share…", "Send the audio file to another app or person") { cb.share(t) }
@@ -138,6 +139,18 @@ fun TrackMenu(t: TrackEntity, cb: LibraryCallbacks) {
         } else {
             MenuItem("✦", "Upgrade quality", "Replace with a higher-resolution FLAC") { cb.upgrade(t) }
         }
+    }
+}
+
+/** "+" on a song or an album: play it next, or line it up at the end? */
+@Composable
+fun QueueChoice(tracks: List<TrackEntity>, cb: LibraryCallbacks) {
+    Sheet(cb::cancelQueue) {
+        val what = if (tracks.size == 1) tracks[0].title else "${tracks.size} songs"
+        NeonText("ADD TO QUEUE", size = 11.sp, color = Neon.Dim, glow = null, spacing = 2.sp)
+        NeonText(what, Modifier.padding(top = 2.dp, bottom = 4.dp), size = 14.sp, weight = FontWeight.Bold, maxLines = 2)
+        MenuItem("▶", "Play next", "Right after the song that's playing", color = Neon.Orange) { cb.enqueue(tracks, next = true) }
+        MenuItem("↓", "Add to end", "After everything that's already lined up") { cb.enqueue(tracks, next = false) }
     }
 }
 

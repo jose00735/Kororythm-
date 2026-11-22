@@ -60,6 +60,8 @@ data class LibraryUi(
     val coverFlow: Boolean = false,
     /** Track whose ⋮ menu is open. */
     val menu: TrackEntity? = null,
+    /** Songs waiting for "play next or add to the end?". */
+    val queueAsk: List<TrackEntity>? = null,
     /** Tracks waiting for "Add to playlist" to pick a playlist. */
     val addTo: List<Long>? = null,
     val prompt: NamePrompt? = null,
@@ -250,6 +252,10 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Looks every song up again (e.g. after the genre rules improved). */
     fun recheckGenres() = viewModelScope.launch { dao.recheckAllGenres(); findGenres() }
+    fun askQueue(tracks: List<TrackEntity>) = ov { it.copy(queueAsk = tracks.takeIf { t -> t.isNotEmpty() }, menu = null) }
+    fun cancelQueue() = ov { it.copy(queueAsk = null) }
+    fun say(msg: String) = ov { it.copy(toast = msg) }
+
     fun openMenu(t: TrackEntity?) = ov { it.copy(menu = t) }
     fun toastShown() = ov { it.copy(toast = null) }
 

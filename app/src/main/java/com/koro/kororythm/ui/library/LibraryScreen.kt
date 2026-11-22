@@ -56,7 +56,11 @@ open class LibraryCallbacks {
     open fun tab(t: LibTab) {}
     open fun query(q: String) {}
     open fun play(tracks: List<TrackEntity>, start: Int) {}
-    open fun enqueue(tracks: List<TrackEntity>) {}
+    /** Queue on the fly: [next] = right after the current song, else at the very end. */
+    open fun enqueue(tracks: List<TrackEntity>, next: Boolean) {}
+    /** Ask whether [tracks] should play next or go to the end. */
+    open fun askQueue(tracks: List<TrackEntity>) {}
+    open fun cancelQueue() {}
     open fun openAlbum(a: AlbumSummary) {}
     open fun openArtist(a: ArtistSummary) {}
     open fun openUserAlbum(a: UserAlbumSummary) {}
@@ -120,10 +124,17 @@ fun LibraryScreen(
         override fun tab(t: LibTab) = vm.setTab(t)
         override fun query(q: String) = vm.setQuery(q)
         override fun play(tracks: List<TrackEntity>, start: Int) {
-            player.playTracks(tracks.map { it.toTrackInfo() }, start)
+            player.playTracks(tracks.map { it.toTrackInfo() }, start, source = ui.detail?.title ?: "Library")
             onBack()
         }
-        override fun enqueue(tracks: List<TrackEntity>) = player.enqueue(tracks.map { it.toTrackInfo() })
+        override fun enqueue(tracks: List<TrackEntity>, next: Boolean) {
+            vm.cancelQueue()
+            player.enqueue(tracks.map { it.toTrackInfo() }, next)
+            val what = if (tracks.size == 1) "“${tracks[0].title}”" else "${tracks.size} songs"
+            vm.say(if (next) "$what will play next" else "$what added to the end")
+        }
+        override fun askQueue(tracks: List<TrackEntity>) = vm.askQueue(tracks)
+        override fun cancelQueue() = vm.cancelQueue()
         override fun openAlbum(a: AlbumSummary) { vm.openAlbum(a) }
         override fun openArtist(a: ArtistSummary) { vm.openArtist(a) }
         override fun openUserAlbum(a: UserAlbumSummary) { vm.openUserAlbum(a) }
@@ -183,6 +194,7 @@ fun LibraryContent(ui: LibraryUi, cb: LibraryCallbacks, nowPlayingUri: String? =
     Box(Modifier.fillMaxSize()) {
         LibraryPage(ui, cb, nowPlayingUri)
         ui.menu?.let { TrackMenu(it, cb) }
+        ui.queueAsk?.let { QueueChoice(it, cb) }
         ui.addTo?.let { ChoosePlaylist(ui.playlists, it, cb) }
         ui.prompt?.let { NameDialog(it, cb) }
         ui.confirmDelete?.let { DeleteDialog(it, cb) }
@@ -292,7 +304,7 @@ internal fun Hint(text: String) {
 private fun TrackList(tracks: List<TrackEntity>, cb: LibraryCallbacks, nowPlayingUri: String?) {
     if (tracks.isEmpty()) { Hint("No tracks match your search."); return }
     LazyColumn(Modifier.fillMaxSize()) {
-        itemsIndexed(tracks, key = { _, t -> t.id }) { i, t -> TrackRow(t, t.uri == nowPlayingUri, { cb.play(tracks, i) }, { cb.enqueue(listOf(t)) }, cb = cb) }
+        itemsIndexed(tracks, key = { _, t -> t.id }) { i, t -> TrackRow(t, t.uri == nowPlayingUri, { cb.play(tracks, i) }, { cb.askQueue(listOf(t)) }, cb = cb) }
     }
 }
 
@@ -392,7 +404,7 @@ private fun DetailView(d: LibDetail, cb: LibraryCallbacks, nowPlayingUri: String
             NeonText("${d.tracks.size} tracks · ${formatTime(d.tracks.sumOf { it.durationMs })}", size = 10.sp, color = Neon.Dim, glow = null)
             androidx.compose.foundation.layout.FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 NeonButton("▶ PLAY ALL", { cb.play(d.tracks, 0) }, active = true, accent = Neon.Orange)
-                NeonButton("+ ADD", { cb.enqueue(d.tracks) })
+                NeonButton("+ QUEUE", { cb.askQueue(d.tracks) })
                 if (d.tracks.size > 1) NeonButton(if (coverFlow) "▦ LIST" else "◫ COVER FLOW", cb::coverFlow, active = coverFlow)
                 d.userAlbumId?.let { id -> NeonButton("DELETE", { cb.deleteUserAlbum(id) }) }
                 d.playlistId?.let { id ->
@@ -417,7 +429,7 @@ private fun DetailView(d: LibDetail, cb: LibraryCallbacks, nowPlayingUri: String
         LazyColumn(Modifier.fillMaxSize()) {
             itemsIndexed(d.tracks, key = { i, t -> "$i:${t.id}" }) { i, t ->
                 TrackRow(
-                    t, t.uri == nowPlayingUri, { cb.play(d.tracks, i) }, { cb.enqueue(listOf(t)) }, number = i + 1, cb = cb,
+                    t, t.uri == nowPlayingUri, { cb.play(d.tracks, i) }, { cb.askQueue(listOf(t)) }, number = i + 1, cb = cb,
                     trailing = if (d.playlistId == null) null else {
                         {
                             Row {

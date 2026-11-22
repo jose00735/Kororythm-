@@ -20,6 +20,8 @@ data class TrackInfo(
     val sampleRate: Int?,
     val bits: Int?,
     val codec: String?,
+    /** Added on the fly (play next / add to end), not part of the list that was started. */
+    val queued: Boolean = false,
 ) {
     fun toMediaItem(): MediaItem {
         val extras = Bundle().apply {
@@ -28,6 +30,7 @@ data class TrackInfo(
             sampleRate?.let { putInt(K_RATE, it) }
             bits?.let { putInt(K_BITS, it) }
             codec?.let { putString(K_CODEC, it) }
+            if (queued) putBoolean(K_QUEUED, true)
         }
         return MediaItem.Builder()
             .setMediaId(uri)
@@ -50,6 +53,7 @@ data class TrackInfo(
         private const val K_RATE = "koro.rate"
         private const val K_BITS = "koro.bits"
         private const val K_CODEC = "koro.codec"
+        private const val K_QUEUED = "koro.queued"
 
         fun fromMediaItem(item: MediaItem): TrackInfo {
             val md = item.mediaMetadata
@@ -64,6 +68,7 @@ data class TrackInfo(
                 sampleRate = ex?.takeIf { it.containsKey(K_RATE) }?.getInt(K_RATE),
                 bits = ex?.takeIf { it.containsKey(K_BITS) }?.getInt(K_BITS),
                 codec = ex?.getString(K_CODEC),
+                queued = ex?.getBoolean(K_QUEUED, false) ?: false,
             )
         }
 
