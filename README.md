@@ -17,6 +17,22 @@ An Android music player for FLAC and MP3 with a classic Winamp layout, two skins
 
 Built with Kotlin, Jetpack Compose and AndroidX Media3. Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Kororythm for Windows (2.0 alpha) — `desktop/`
+
+A Windows version written in Go, with the same skins, equalizer and play queue as the phone app.
+
+- **Classic layout as real floating windows**: player, equalizer, playlist and library are separate windows. Drag one by its title strip and it snaps to the others and to the screen edges; windows docked to the player move with it; double-click a title strip to shade a window down to one line. Each window remembers its place.
+- **Go audio engine**: FLAC (16/24-bit, any sample rate) and MP3, gapless hand-over between songs, optional crossfade, the same 10-band EQ, presets and Boost as Android, and a live spectrum.
+- **Library**: watches your music folders (Music by default), reads tags and cover art, and browses by artist, album, song, genre and decade, with search.
+- **Play next / Add to end**, shuffle and repeat, with the playlist split into *From <list>* and *Queued by you* sections.
+- **Skins**: Neon, HiFi, Pod and Chrome Deck. **Tray icon** keeps music playing with every window hidden.
+
+Install: download `Kororythm-<version>-Windows.zip` from the *Windows build* workflow, unzip, run the setup. It installs for your user only (no admin rights) and needs the Microsoft Edge WebView2 Runtime, which Windows 11 and most Windows 10 PCs already have.
+
+Develop: `cd desktop && go test ./...`; `go run ./cmd/kororythm-dev -music <folder>` serves every window to a browser at `/dev.html` on any OS (no sound) for quick work on the interface.
+
+Coming next (blueprint phases): the Pod, Prism and Cover Stage layouts as their own window shapes, downloads, then phone ⇄ PC sync.
+
 ## New in v1.6 — Play next / Add to end
 
 - Tap **+** on a song (or **+ QUEUE** on an album or playlist) and choose **Play next** (right after the current song) or **Add to end** (after everything already lined up). The song's ⋮ menu has both too.

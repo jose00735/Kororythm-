@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kororythm — developer desktop</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; font-family: "Segoe UI", sans-serif; }
+  body { background: radial-gradient(ellipse at 30% 20%, #2c5d8f 0%, #183456 45%, #0c1a2e 100%); }
+  .note { position: fixed; right: 14px; bottom: 10px; color: rgba(255,255,255,0.55); font-size: 12px; }
+  iframe { position: absolute; border: 0; background: transparent; box-shadow: 0 10px 28px rgba(0,0,0,0.45); border-radius: 6px; }
+</style>
+</head>
+<body>
+<div class="note">Developer desktop: each frame is one Kororythm window, placed by the Go window manager.</div>
+<script>
+// Mirrors the real Windows app: one page per window, positioned where the Go side puts it.
+const frames = {};
+async function sync() {
+  const st = await fetch("/api/win/bounds").then((r) => r.json());
+  for (const [name, w] of Object.entries(st)) {
+    let f = frames[name];
+    if (!f) {
+      f = frames[name] = document.createElement("iframe");
+      f.src = `/index.html?w=${name}`;
+      f.title = name;
+      document.body.append(f);
+    }
+    f.style.display = w.Open ? "block" : "none";
+    Object.assign(f.style, { left: `${w.X}px`, top: `${w.Y}px`, width: `${w.W}px`, height: `${w.H}px` });
+  }
+}
+sync();
+setInterval(sync, 120);
+</script>
+</body>
+</html>

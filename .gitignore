@@ -6,3 +6,7 @@ local.properties
 *.iml
 .kotlin/
 app/out/
+
+# Windows app
+desktop/bin/
+!desktop/build/

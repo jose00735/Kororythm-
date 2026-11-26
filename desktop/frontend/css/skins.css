@@ -1,0 +1,127 @@
+/* Kororythm skins. Colours follow the Android app's palettes (ui/skin/Neon.kt). */
+
+body[data-skin="neon"] {
+  --lcd-sub: #5e8796;
+  --bg: #04060b;
+  --panel: rgba(6, 12, 22, 0.96);
+  --panel-2: #08111e;
+  --accent: #00e5ff;
+  --accent-2: #ff6a00;
+  --ink: #e8fdff;
+  --dim: #5e8796;
+  --lcd: #01070d;
+  --lcd-ink: #00e5ff;
+  --lcd-dim: #0b4a57;
+  --edge: rgba(0, 229, 255, 0.55);
+  --edge-soft: rgba(0, 229, 255, 0.18);
+  --glow: 0 0 6px rgba(0, 229, 255, 0.65);
+  --glow-orange: 0 0 6px rgba(255, 106, 0, 0.7);
+  --face: linear-gradient(180deg, #0b1828, #060d17);
+  --face-pressed: linear-gradient(180deg, #03080f, #0a1626);
+  --face-ink: #00e5ff;
+  --title: linear-gradient(90deg, rgba(0, 229, 255, 0.10), rgba(0, 229, 255, 0.02) 60%, rgba(255, 106, 0, 0.08));
+  --title-ink: #00e5ff;
+  --metal: none;
+  --row-hi: rgba(0, 229, 255, 0.10);
+  --row-cur: rgba(255, 106, 0, 0.14);
+  --font: "Cascadia Mono", "Consolas", "DejaVu Sans Mono", monospace;
+  --font-lcd: "Cascadia Mono", "Consolas", "DejaVu Sans Mono", monospace;
+  --spacing: 0.08em;
+  --radius: 6px;
+}
+
+/* Skeuomorphic hi-fi deck: brushed aluminium, engraved labels, green LCD. */
+body[data-skin="hifi"] {
+  --lcd-sub: #5f9c74;
+  --bg: #bcc1c7;
+  --panel: #dce0e4;
+  --panel-2: #cfd4d9;
+  --accent: #127a5b;
+  --accent-2: #d7461a;
+  --ink: #1c2127;
+  --dim: #59616a;
+  --lcd: #17241b;
+  --lcd-ink: #8dffb4;
+  --lcd-dim: #2c4a36;
+  --edge: #6e757d;
+  --edge-soft: rgba(28, 33, 39, 0.18);
+  --glow: none;
+  --glow-orange: none;
+  --face: linear-gradient(180deg, #f7f8fa, #dadde1 55%, #b4bac1);
+  --face-pressed: linear-gradient(180deg, #9aa1a9, #cdd2d8);
+  --face-ink: #1c2127;
+  --title: linear-gradient(180deg, #edeff2, #d3d7dc 60%, #c4c9cf);
+  --title-ink: #1c2127;
+  --metal: repeating-linear-gradient(90deg, rgba(255,255,255,0.10) 0 1px, rgba(0,0,0,0.035) 1px 2px, rgba(255,255,255,0.05) 2px 4px),
+           linear-gradient(180deg, #d2d6db, #bcc1c7 55%, #a9afb6);
+  --row-hi: rgba(18, 122, 91, 0.12);
+  --row-cur: rgba(215, 70, 26, 0.14);
+  --font: "Segoe UI", "DejaVu Sans", sans-serif;
+  --font-lcd: "Cascadia Mono", "Consolas", "DejaVu Sans Mono", monospace;
+  --spacing: 0.02em;
+  --radius: 5px;
+}
+
+/* White and silver, blue highlights. */
+body[data-skin="pod"] {
+  --lcd-sub: #6b737c;
+  --bg: #eef0f3;
+  --panel: #ffffff;
+  --panel-2: #f5f6f8;
+  --accent: #1e6fe0;
+  --accent-2: #e5482a;
+  --ink: #16191d;
+  --dim: #6b737c;
+  --lcd: #f9fafb;
+  --lcd-ink: #1059c9;
+  --lcd-dim: #c9d6ea;
+  --edge: #b4bbc3;
+  --edge-soft: rgba(22, 25, 29, 0.10);
+  --glow: none;
+  --glow-orange: none;
+  --face: linear-gradient(180deg, #ffffff, #f1f3f5 60%, #dde1e5);
+  --face-pressed: linear-gradient(180deg, #d5dae0, #edeff2);
+  --face-ink: #16191d;
+  --title: linear-gradient(180deg, #ffffff, #eef0f3);
+  --title-ink: #16191d;
+  --metal: linear-gradient(180deg, #f8f9fa, #ebedf0 55%, #dde1e5);
+  --row-hi: rgba(30, 111, 224, 0.10);
+  --row-cur: rgba(30, 111, 224, 0.16);
+  --font: "Segoe UI", "DejaVu Sans", sans-serif;
+  --font-lcd: "Segoe UI", "DejaVu Sans", sans-serif;
+  --spacing: 0;
+  --radius: 8px;
+}
+
+/* Polished chrome plates with an amber LCD. */
+body[data-skin="chrome"] {
+  --lcd-sub: #b08a4c;
+  --bg: #9ba2aa;
+  --panel: #d9dde2;
+  --panel-2: #c8cdd3;
+  --accent: #184e74;
+  --accent-2: #d9480f;
+  --ink: #101316;
+  --dim: #3e454d;
+  --lcd: #1c1307;
+  --lcd-ink: #ffb347;
+  --lcd-dim: #4a3414;
+  --edge: #3a4047;
+  --edge-soft: rgba(16, 19, 22, 0.22);
+  --glow: none;
+  --glow-orange: 0 0 5px rgba(255, 179, 71, 0.6);
+  --face: linear-gradient(180deg, #ffffff, #cbd1d8 40%, #eff2f5 60%, #959da6);
+  --face-pressed: linear-gradient(180deg, #7e868f, #b7bec6);
+  --face-ink: #101316;
+  --title: linear-gradient(180deg, #fbfcfd, #c3c9d0 35%, #eef1f4 55%, #9aa2ab 85%, #d7dce1);
+  --title-ink: #101316;
+  --metal: linear-gradient(115deg, rgba(255,255,255,0) 30%, rgba(255,255,255,0.45) 42%, rgba(255,255,255,0) 54%),
+           repeating-linear-gradient(90deg, rgba(255,255,255,0.12) 0 1px, rgba(0,0,0,0.05) 1px 3px),
+           linear-gradient(180deg, #c5cad0, #a3aab2 55%, #8a929b);
+  --row-hi: rgba(24, 78, 116, 0.14);
+  --row-cur: rgba(217, 72, 15, 0.16);
+  --font: "Segoe UI", "DejaVu Sans", sans-serif;
+  --font-lcd: "Cascadia Mono", "Consolas", "DejaVu Sans Mono", monospace;
+  --spacing: 0.02em;
+  --radius: 5px;
+}

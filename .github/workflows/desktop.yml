@@ -1,0 +1,71 @@
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+    paths: ["desktop/**", ".github/workflows/desktop.yml"]
+    tags: ["v*"]
+  pull_request:
+    paths: ["desktop/**", ".github/workflows/desktop.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: desktop/go.sum
+      - name: ffmpeg (makes test songs)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Vet (Linux and Windows)
+        run: |
+          go vet ./...
+          GOOS=windows go vet ./...
+      - name: Tests (audio engine, EQ, library, queue, window snapping, API)
+        run: go test ./...
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: desktop/go.sum
+      - name: Version
+        id: v
+        shell: bash
+        run: |
+          v=$(grep -oP 'Version = "\K[^"]+' internal/app/app.go)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - name: Build kororythm.exe
+        shell: bash
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p bin
+          go build -trimpath -ldflags "-H windowsgui -s -w" -o bin/kororythm.exe ./cmd/kororythm
+      - name: Build the installer
+        shell: pwsh
+        working-directory: desktop/build
+        run: |
+          $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (-not (Test-Path $nsis)) { choco install nsis -y --no-progress; $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe" }
+          & $nsis /V2 /DVERSION=2.0.0 /DEXE=..\bin\kororythm.exe "/DOUT=..\bin\Kororythm-${{ steps.v.outputs.version }}-Setup.exe" installer.nsi
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Zip the installer
+        shell: pwsh
+        run: Compress-Archive -Path "bin\Kororythm-${{ steps.v.outputs.version }}-Setup.exe" -DestinationPath "bin\Kororythm-${{ steps.v.outputs.version }}-Windows.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kororythm-windows
+          path: desktop/bin/Kororythm-*-Windows.zip
