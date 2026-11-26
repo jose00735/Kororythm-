@@ -43,6 +43,17 @@ Develop: `cd desktop && go test ./...`; `go run ./cmd/kororythm-dev -music <fold
 
 Coming next (blueprint phases): the Android update, then phone ⇄ PC sync.
 
+## New in v2.0 (Android) — iPod menus and the Windows 7 bar
+
+- **Pod layout:** MENU now opens real iPod menus: Music → Playlists, Artists, Albums, Songs,
+  Genres, Decades; Up Next; Now Playing; Shuffle Songs; Settings (shuffle, repeat, layout, skin).
+  Turn the wheel to move, press the centre to open or play, MENU to go back a level. Levels slide
+  in and out like the real thing, and rows can be tapped too.
+- **Browse with the wheel anywhere:** the small click-wheel button next to STYLE (Classic,
+  Cover Stage, Prism) opens the same menus in a sheet with its own click wheel.
+- **Prism:** the controls are now a Windows 7 media-player bar: smoked glass, a glowing seek
+  line, the round play orb joined to ⏮ / ⏭, stop, shuffle, repeat and lyrics, tinted per skin.
+
 ## New in v1.6 — Play next / Add to end
 
 - Tap **+** on a song (or **+ QUEUE** on an album or playlist) and choose **Play next** (right after the current song) or **Add to end** (after everything already lined up). The song's ⋮ menu has both too.

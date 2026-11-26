@@ -54,6 +54,14 @@ import androidx.compose.ui.unit.sp
 import com.koro.kororythm.playback.PlayerActions
 import com.koro.kororythm.playback.PlayerUiState
 import com.koro.kororythm.ui.common.ArtThumb
+import com.koro.kororythm.ui.pod.PodInk
+import com.koro.kororythm.ui.pod.PodMenuList
+import com.koro.kororythm.ui.pod.PodMenuState
+import com.koro.kororythm.ui.pod.PodResult
+import com.koro.kororythm.ui.pod.PodTree
+import com.koro.kororythm.ui.pod.RoomCatalog
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.koro.kororythm.ui.skin.BrushedMetal
 import com.koro.kororythm.ui.skin.GridBackground
 import com.koro.kororythm.ui.skin.Neon
@@ -73,25 +81,34 @@ private enum class WheelHint { NONE, VOLUME }
  * POD: a pocket-player body with a screen and a click wheel.
  *
  * Wheel: turn it to change the volume (Now Playing), move through the song (after pressing
- * the centre once: scrubbing) or move the highlight (queue menu). Press MENU for the queue
- * list (again to go back), ⏮ / ⏭ for previous / next, ▶❚❚ to play or pause, the centre to
- * pick the highlighted song or to toggle scrubbing.
+ * the centre once: scrubbing) or move the highlight (menus). Press MENU for the iPod menus
+ * (Music → Playlists, Artists, Albums, Songs, Genres, Decades; Up Next; Shuffle Songs;
+ * Settings) and again to go back a level, ⏮ / ⏭ for previous / next, ▶❚❚ to play or pause,
+ * the centre to open or play the highlighted row or to toggle scrubbing.
  */
 @Composable
-fun PodLayout(st: PlayerUiState, actions: PlayerActions, hooks: LayoutHooks, startMode: PodMode = PodMode.NOW, startVolume: Float? = null) {
+fun PodLayout(
+    st: PlayerUiState,
+    actions: PlayerActions,
+    hooks: LayoutHooks,
+    startMode: PodMode = PodMode.NOW,
+    startVolume: Float? = null,
+    menuState: PodMenuState? = null,
+) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     val audio = remember { context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager }
     var mode by remember { mutableStateOf(startMode) }
     var hint by remember { mutableStateOf(if (startVolume != null) WheelHint.VOLUME else WheelHint.NONE) }
     var hintAt by remember { mutableStateOf(0L) }
-    var cursor by remember { mutableIntStateOf(st.currentIndex.coerceAtLeast(0)) }
+    val scope = rememberCoroutineScope()
+    val state by rememberUpdatedState(st)
+    val menu = menuState ?: remember { PodMenuState(PodTree(RoomCatalog, actions) { state }) }
     var volume by remember {
         mutableFloatStateOf(
             startVolume ?: audio?.let { it.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / it.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1) } ?: 0.5f,
         )
     }
-    val state by rememberUpdatedState(st)
 
     LaunchedEffect(hintAt) { if (hintAt > 0) { kotlinx.coroutines.delay(1600); hint = WheelHint.NONE } }
 
@@ -106,21 +123,30 @@ fun PodLayout(st: PlayerUiState, actions: PlayerActions, hooks: LayoutHooks, sta
                 hint = WheelHint.VOLUME; hintAt = System.currentTimeMillis()
             }
             PodMode.SCRUB -> actions.seekTo((state.positionMs + dir * 3000L).coerceIn(0, state.durationMs.coerceAtLeast(0)))
-            PodMode.MENU -> cursor = (cursor + dir).coerceIn(0, (state.queue.size - 1).coerceAtLeast(0))
+            PodMode.MENU -> menu.tick(dir)
         }
+    }
+
+    fun choose(index: Int) {
+        if (menu.busy) return
+        scope.launch { if (menu.select(actions, index) == PodResult.NOW_PLAYING) { mode = PodMode.NOW; menu.home() } }
     }
 
     fun press(button: WheelButton) {
         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         when (button) {
-            WheelButton.MENU -> { mode = if (mode == PodMode.MENU) PodMode.NOW else PodMode.MENU; cursor = state.currentIndex.coerceAtLeast(0) }
+            // MENU: open the menus from Now Playing; inside them, go up a level (and out at the top)
+            WheelButton.MENU -> when (mode) {
+                PodMode.MENU -> if (!menu.back()) mode = PodMode.NOW
+                else -> { mode = PodMode.MENU; scope.launch { menu.refresh() } }
+            }
             WheelButton.PREV -> actions.previous()
             WheelButton.NEXT -> actions.next()
             WheelButton.PLAY -> actions.playPause()
             WheelButton.CENTER -> when (mode) {
                 PodMode.NOW -> mode = PodMode.SCRUB
                 PodMode.SCRUB -> mode = PodMode.NOW
-                PodMode.MENU -> { if (state.queue.isNotEmpty()) actions.playAt(cursor); mode = PodMode.NOW }
+                PodMode.MENU -> choose(menu.top.cursor)
             }
         }
     }
@@ -135,7 +161,7 @@ fun PodLayout(st: PlayerUiState, actions: PlayerActions, hooks: LayoutHooks, sta
                 val bodyH = minOf(maxHeight, bodyW * 1.66f)
                 PodBody(Modifier.size(bodyW, bodyH)) {
                     Column(Modifier.fillMaxSize().padding(bodyW * 0.07f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        PodScreen(st, mode, cursor, hint, volume, Modifier.fillMaxWidth().height(bodyH * 0.44f))
+                        PodScreen(st, mode, menu, hint, volume, Modifier.fillMaxWidth().height(bodyH * 0.44f), onTap = ::choose)
                         Spacer(Modifier.weight(1f))
                         ClickWheel(Modifier.size(bodyW * 0.74f), onTick = ::tick, onPress = ::press, playing = st.isPlaying)
                         Spacer(Modifier.weight(1f))
@@ -147,7 +173,7 @@ fun PodLayout(st: PlayerUiState, actions: PlayerActions, hooks: LayoutHooks, sta
 }
 
 @Composable
-private fun PodBody(modifier: Modifier, content: @Composable () -> Unit) {
+internal fun PodBody(modifier: Modifier, content: @Composable () -> Unit) {
     val metal = Neon.metal
     val body = when {
         metal?.chrome == true -> Brush.linearGradient(listOf(Color(0xFFF4F6F8), Color(0xFFAAB1B9), Color(0xFFE7EAED), Color(0xFF8D959E)))
@@ -163,10 +189,10 @@ private fun PodBody(modifier: Modifier, content: @Composable () -> Unit) {
 
 
 /** Screen colours: a white screen on the Pod skin, otherwise the skin's display windows. */
-private class PodColors(val bg: Color, val ink: Color, val dim: Color, val bar: Brush, val barInk: Color, val sel: Brush, val selInk: Color, val fill: Color)
+internal class PodColors(val bg: Color, val ink: Color, val dim: Color, val bar: Brush, val barInk: Color, val sel: Brush, val selInk: Color, val fill: Color)
 
 @Composable
-private fun podColors(): PodColors {
+internal fun podColors(): PodColors {
     val pod = com.koro.kororythm.ui.skin.SkinState.current == com.koro.kororythm.ui.skin.SkinId.POD
     return if (pod) {
         PodColors(
@@ -185,7 +211,7 @@ private fun podColors(): PodColors {
 }
 
 @Composable
-private fun PodScreen(st: PlayerUiState, mode: PodMode, cursor: Int, hint: WheelHint, volume: Float, modifier: Modifier) {
+private fun PodScreen(st: PlayerUiState, mode: PodMode, menu: PodMenuState, hint: WheelHint, volume: Float, modifier: Modifier, onTap: (Int) -> Unit) {
     val c = podColors()
     Column(
         modifier.clip(RoundedCornerShape(8.dp)).background(c.bg)
@@ -195,7 +221,7 @@ private fun PodScreen(st: PlayerUiState, mode: PodMode, cursor: Int, hint: Wheel
         Row(Modifier.fillMaxWidth().background(c.bar).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             NeonText(if (st.isPlaying) "▶" else "❚❚", Modifier.width(18.dp), size = 9.sp, color = c.barInk, glow = null)
             NeonText(
-                when (mode) { PodMode.MENU -> "Up Next"; else -> "Now Playing" },
+                when (mode) { PodMode.MENU -> menu.top.title; else -> "Now Playing" },
                 Modifier.weight(1f), size = 11.sp, weight = FontWeight.Bold, color = c.barInk, glow = null,
             )
             Canvas(Modifier.size(22.dp, 10.dp)) { // battery
@@ -205,20 +231,7 @@ private fun PodScreen(st: PlayerUiState, mode: PodMode, cursor: Int, hint: Wheel
             }
         }
         if (mode == PodMode.MENU) {
-            val list = rememberLazyListState()
-            LaunchedEffect(cursor) { list.animateScrollToItem((cursor - 3).coerceAtLeast(0)) }
-            LazyColumn(Modifier.fillMaxSize(), state = list) {
-                itemsIndexed(st.queue) { i, t ->
-                    val on = i == cursor
-                    Row(
-                        Modifier.fillMaxWidth().then(if (on) Modifier.background(c.sel) else Modifier).padding(horizontal = 8.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        NeonText(t.title, Modifier.weight(1f), size = 12.sp, color = if (on) c.selInk else c.ink, glow = null, weight = if (i == st.currentIndex) FontWeight.Bold else FontWeight.Normal)
-                        NeonText(if (i == st.currentIndex) "♪" else "›", size = 12.sp, color = if (on) c.selInk else c.dim, glow = null)
-                    }
-                }
-            }
+            PodMenuList(menu, PodInk(c.ink, c.dim, c.sel, c.selInk), Modifier.fillMaxSize(), onTap)
             return@Column
         }
         val cur = st.current

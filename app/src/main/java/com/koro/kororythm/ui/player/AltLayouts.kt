@@ -94,6 +94,10 @@ fun LayoutTopBar(hooks: LayoutHooks, modifier: Modifier = Modifier, ink: Color =
         Canvas(Modifier.size(28.dp)) { drawParrot(androidx.compose.ui.geometry.Offset.Zero, size.minDimension) }
         Spacer(Modifier.width(8.dp))
         NeonText("KORORYTHM", Modifier.weight(1f), size = 13.sp, weight = FontWeight.Bold, spacing = 4.sp, color = ink)
+        if (LayoutState.current != PlayerLayoutId.POD) {
+            com.koro.kororythm.ui.pod.WheelIconButton()
+            Spacer(Modifier.width(6.dp))
+        }
         NeonButton("STYLE", { StyleSheetState.open = true })
         Spacer(Modifier.width(6.dp))
         NeonButton("LIBRARY", hooks.onOpenLibrary, accent = Neon.Orange)
@@ -262,17 +266,7 @@ fun PrismLayout(st: PlayerUiState, actions: PlayerActions, viz: VizState, hooks:
             NeonText(cur?.title ?: "PRISM", size = 20.sp, weight = FontWeight.Bold, color = Color.White, glow = Color.White)
             NeonText(listOfNotNull(cur?.artist, cur?.album).joinToString(" · ").ifEmpty { "Play something to light it up" }, size = 12.sp, color = Color(0xFFD7E3EA), glow = null)
             AnimatedVisibility(controls, enter = fadeIn(), exit = fadeOut()) {
-                Column(Modifier.padding(top = 10.dp)) {
-                    NeonSeekBar(st.positionMs, st.durationMs, actions::seekTo, Modifier.fillMaxWidth())
-                    Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        TransportButton(TIcon.PREV, actions::previous, size = 48.dp)
-                        TransportButton(if (st.isPlaying) TIcon.PAUSE else TIcon.PLAY, actions::playPause, size = 58.dp, accent = Neon.Orange)
-                        TransportButton(TIcon.NEXT, actions::next, size = 48.dp)
-                        Spacer(Modifier.weight(1f))
-                        TransportButton(TIcon.SHUFFLE, actions::toggleShuffle, size = 48.dp, active = st.shuffle)
-                        TransportButton(TIcon.LYRICS, hooks.onLyrics, size = 48.dp)
-                    }
-                }
+                WmpBar(st, actions, hooks.onLyrics, Modifier.padding(top = 10.dp).fillMaxWidth())
             }
         }
         AnimatedVisibility(controls, Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) {

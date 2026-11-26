@@ -89,7 +89,7 @@ fun TransportButton(
     }
 }
 
-private fun DrawScope.drawTransportIcon(icon: TIcon, c: Color) {
+internal fun DrawScope.drawTransportIcon(icon: TIcon, c: Color) {
     val w = size.width; val h = size.height
     fun tri(x0: Float, x1: Float, pointRight: Boolean) {
         val p = Path().apply {

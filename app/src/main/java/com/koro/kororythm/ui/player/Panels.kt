@@ -414,6 +414,8 @@ fun Header(output: OutputDevice, modifier: Modifier = Modifier, onOpenLibrary: (
             }
             Spacer(Modifier.width(6.dp))
         }
+        com.koro.kororythm.ui.pod.WheelIconButton()
+        Spacer(Modifier.width(4.dp))
         NeonButton("STYLE", { StyleSheetState.open = true })
         Spacer(Modifier.width(6.dp))
         NeonButton("LIBRARY", onOpenLibrary, accent = Neon.Orange)

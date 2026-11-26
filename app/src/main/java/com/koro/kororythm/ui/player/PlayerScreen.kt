@@ -82,6 +82,7 @@ fun PlayerScreen(
             PlayerLayoutId.POD -> PodLayout(st, vm, hooks)
             PlayerLayoutId.PRISM -> PrismLayout(st, vm, viz, hooks)
         }
+        if (LayoutState.current != PlayerLayoutId.POD) com.koro.kororythm.ui.pod.BrowseSheet(st, vm)
         StyleSheet()
         overlay?.let { e ->
             key(e) { DeviceOverlay(e) { if (overlay === e) overlay = null } }

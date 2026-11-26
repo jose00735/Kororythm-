@@ -14,8 +14,8 @@ android {
         applicationId = "com.koro.kororythm"
         minSdk = 26
         targetSdk = 35
-        versionCode = 25
-        versionName = "1.6.0"
+        versionCode = 26
+        versionName = "2.0.0"
         // yt-dlp ships Python/ffmpeg as native libs: phones only (keeps the APK smaller)
     }
 
