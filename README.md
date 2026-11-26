@@ -17,7 +17,7 @@ An Android music player for FLAC and MP3 with a classic Winamp layout, two skins
 
 Built with Kotlin, Jetpack Compose and AndroidX Media3. Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Kororythm for Windows (2.0 alpha) — `desktop/`
+## Kororythm for Windows (2.0 beta) — `desktop/`
 
 A Windows version written in Go, with the same skins, equalizer and play queue as the phone app.
 
@@ -31,7 +31,17 @@ Install: download `Kororythm-<version>-Windows.zip` from the *Windows build* wor
 
 Develop: `cd desktop && go test ./...`; `go run ./cmd/kororythm-dev -music <folder>` serves every window to a browser at `/dev.html` on any OS (no sound) for quick work on the interface.
 
-Coming next (blueprint phases): the Pod, Prism and Cover Stage layouts as their own window shapes, downloads, then phone ⇄ PC sync.
+**New in 2.0 beta — four layouts.** Switch with the parrot menu on any title bar, the tray icon, *Settings → Layout*, or Ctrl+1–4:
+
+- **Classic** — the floating Winamp-style windows above.
+- **Pod** — a window shaped like an iPod: screen and click wheel only. Drag round the wheel (or use the mouse wheel / arrow keys) to scroll menus, Enter is the centre button, Esc is MENU. Music → Playlists, Artists, Albums, Songs, Genres, Decades; Shuffle Songs; Now Playing (the wheel is volume, centre press scrubs).
+- **Prism** — a Windows 7-style media player window: glass frame, File / View / Play / Tools / Help menus, library tree, the PRISM light show from Android, and a glossy control bar with a round play button. Tools → Equalizer opens an EQ drawer.
+- **Cover Stage** — a phone-shaped window with the spring-driven cover flow, title, seek, transport and *Up next*.
+- **iPod browser everywhere** — Ctrl+B opens the iPod over any layout to walk the library with the wheel.
+- **Playlists on the PC** (no duplicates), saved from the queue or with *Add to playlist…*; play counts are kept for sync.
+- **Downloads** (Ctrl+D) — paste a link, fetch (stoppable), pick playlist songs, save as tagged MP3 (V0 or 320) into *Music\Kororythm Downloads*, with a live LOG. yt-dlp and ffmpeg are fetched from their GitHub releases the first time.
+
+Coming next (blueprint phases): the Android update, then phone ⇄ PC sync.
 
 ## New in v1.6 — Play next / Add to end
 

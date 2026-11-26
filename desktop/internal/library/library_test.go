@@ -70,3 +70,25 @@ func TestScanQueriesAndRescan(t *testing.T) {
 		t.Fatalf("reloaded %d songs, %d folders", l2.Count(), len(l2.Folders()))
 	}
 }
+
+func TestPlaylistsRefuseDuplicates(t *testing.T) {
+	l := Open(filepath.Join(t.TempDir(), "lib.json"))
+	id, err := l.CreatePlaylist(" Night Drive ", []string{"a", "b", "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := l.AddToPlaylist(id, []string{"b", "c"}); n != 1 {
+		t.Fatalf("added %d, want 1 (b was already there)", n)
+	}
+	p, _, _ := l.Playlist(id)
+	if p.Name != "Night Drive" || len(p.Tracks) != 3 || p.Tracks[2] != "c" {
+		t.Fatalf("playlist = %+v", p)
+	}
+	if _, err := l.CreatePlaylist("  ", nil); err == nil {
+		t.Fatal("an empty name should be refused")
+	}
+	l.Save()
+	if l2 := Open(l.file); len(l2.Playlists()) != 1 {
+		t.Fatal("playlist not saved")
+	}
+}

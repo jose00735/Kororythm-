@@ -119,6 +119,13 @@ func (p *Player) events() {
 			p.pending = -1
 			p.message = ""
 			p.mu.Unlock()
+			// Count a play once the song has really been listened to for a bit.
+			id := ev.ID
+			time.AfterFunc(15*time.Second, func() {
+				if st := p.eng.Status(); st.ID == id && st.PositionMs >= 10000 {
+					p.lib.Played(id)
+				}
+			})
 			p.changed()
 		case "ended":
 			p.changed()

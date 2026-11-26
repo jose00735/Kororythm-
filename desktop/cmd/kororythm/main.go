@@ -23,7 +23,16 @@ import (
 //go:embed icon.png
 var trayIcon []byte
 
-var titles = map[string]string{"player": "Kororythm", "eq": "Kororythm Equalizer", "playlist": "Kororythm Playlist", "library": "Kororythm Library"}
+var titles = map[string]string{
+	"player": "Kororythm", "eq": "Kororythm Equalizer", "playlist": "Kororythm Playlist", "library": "Kororythm Library",
+	"pod": "Kororythm", "prism": "Kororythm", "cover": "Kororythm", "downloads": "Kororythm Downloads",
+}
+
+// Each layout's own window gets a taskbar button; the side windows don't.
+var onTaskbar = map[string]bool{"player": true, "pod": true, "prism": true, "cover": true}
+
+// Windows drawn as objects need a see-through background.
+var transparent = map[string]bool{"pod": true, "cover": true, "prism": true}
 
 // host moves the Wails windows for the window manager.
 type host struct {
@@ -39,12 +48,17 @@ func (h *host) get(n string) *application.WebviewWindow {
 
 func (h *host) SetBounds(n string, r winmgr.Rect) {
 	if w := h.get(n); w != nil {
+		old := w.Bounds()
 		w.SetBounds(application.Rect{X: r.X, Y: r.Y, Width: r.W, Height: r.H})
+		if old.Width != r.W || old.Height != r.H {
+			applyShape(n, w)
+		}
 	}
 }
 func (h *host) Show(n string) {
 	if w := h.get(n); w != nil {
 		w.Show()
+		applyShape(n, w)
 	}
 }
 func (h *host) Hide(n string) {
@@ -120,7 +134,12 @@ func main() {
 		if r.W == 0 {
 			r = def.Rect
 		}
+		bg := application.BackgroundTypeSolid
+		if transparent[name] {
+			bg = application.BackgroundTypeTransparent
+		}
 		w := wapp.Window.NewWithOptions(application.WebviewWindowOptions{
+			BackgroundType:  bg,
 			Name:            name,
 			Title:           titles[name],
 			URL:             "/index.html?w=" + name,
@@ -135,18 +154,23 @@ func main() {
 			AlwaysOnTop:     top,
 			BackgroundColour: application.NewRGB(4, 6, 11),
 			Windows: application.WindowsWindow{
-				// One taskbar button, like Winamp: only the player shows there.
-				HiddenOnTaskbar: name != "player",
+				// One taskbar button per layout, like Winamp: side windows don't show there.
+				HiddenOnTaskbar: !onTaskbar[name],
+				// The page draws its own outline; no system shadow box around shaped windows.
+				DisableFramelessWindowDecorations: transparent[name] && name != "prism",
 			},
 		})
 		n := name
-		if name == "player" {
+		if onTaskbar[name] {
 			w.RegisterHook(events.Common.WindowRestore, func(*application.WindowEvent) { core.Win.ApplyAll() })
 			w.RegisterHook(events.Common.WindowUnMinimise, func(*application.WindowEvent) { core.Win.ApplyAll() })
 		}
-		// Alt+F4 on a side window hides it; on the player it quits.
+		// Alt+F4 on a side window hides it; on a layout's own window it quits.
 		w.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
-			if n == "player" {
+			if onTaskbar[n] && n != "pod" {
+				return
+			}
+			if n == "pod" && core.Win.Layout() == "pod" {
 				return
 			}
 			e.Cancel()
@@ -162,12 +186,13 @@ func main() {
 		// Minimising the player tucks the side windows away (they have no taskbar
 		// button); restoring it brings back the ones that were open.
 		Minimize: func() {
+			main := winmgr.Main[core.Win.Layout()]
 			for n, w := range h.wins {
-				if n != "player" {
+				if n != main {
 					w.Hide()
 				}
 			}
-			if p := h.get("player"); p != nil {
+			if p := h.get(main); p != nil {
 				p.Minimise()
 			}
 		},
@@ -191,6 +216,13 @@ func main() {
 	tray.SetTooltip("Kororythm")
 	menu := application.NewMenu()
 	menu.Add("Show Kororythm").OnClick(func(*application.Context) { core.Win.ApplyAll() })
+	layouts := menu.AddSubmenu("Layout")
+	for _, l := range [][2]string{{"classic", "Classic"}, {"pod", "Pod"}, {"prism", "Prism"}, {"cover", "Cover Stage"}} {
+		id := l[0]
+		layouts.Add(l[1]).OnClick(func(*application.Context) { _ = core.Do(app.Command{Op: "layout", Name: id}) })
+	}
+	menu.Add("iPod browser").OnClick(func(*application.Context) { core.Win.SetOpen("pod", !core.Win.IsOpen("pod")) })
+	menu.Add("Downloads").OnClick(func(*application.Context) { core.Win.SetOpen("downloads", true) })
 	menu.AddSeparator()
 	menu.Add("Play / Pause").OnClick(func(*application.Context) { _ = core.Do(app.Command{Op: "toggle"}) })
 	menu.Add("Next").OnClick(func(*application.Context) { _ = core.Do(app.Command{Op: "next"}) })
@@ -198,7 +230,12 @@ func main() {
 	menu.AddSeparator()
 	menu.Add("Quit").OnClick(func(*application.Context) { wapp.Quit() })
 	tray.SetMenu(menu)
-	tray.OnClick(func() { core.Win.ApplyAll() })
+	tray.OnClick(func() {
+		core.Win.ApplyAll()
+		if w := h.get(winmgr.Main[core.Win.Layout()]); w != nil {
+			w.Focus()
+		}
+	})
 
 	wapp.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
 		var work []winmgr.Rect

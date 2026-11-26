@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/jose00735/kororythm/desktop/internal/audio"
+	"github.com/jose00735/kororythm/desktop/internal/downloads"
 	"github.com/jose00735/kororythm/desktop/internal/library"
 	"github.com/jose00735/kororythm/desktop/internal/player"
 	"github.com/jose00735/kororythm/desktop/internal/settings"
@@ -18,7 +20,7 @@ import (
 )
 
 // Version is shown in the About box and the installer.
-var Version = "2.0.0-alpha.1"
+var Version = "2.0.0-beta.1"
 
 // Windows of the Classic layout, with their default places.
 var Windows = map[string]winmgr.State{
@@ -26,6 +28,10 @@ var Windows = map[string]winmgr.State{
 	"eq":       {Rect: winmgr.Rect{X: 120, Y: 270, W: 460, H: 196}, Open: true},
 	"playlist": {Rect: winmgr.Rect{X: 120, Y: 466, W: 460, H: 330}, Open: true},
 	"library":  {Rect: winmgr.Rect{X: 580, Y: 90, W: 680, H: 706}, Open: false},
+	"pod":      {Rect: winmgr.Rect{X: 160, Y: 80, W: 340, H: 580}},
+	"prism":    {Rect: winmgr.Rect{X: 120, Y: 70, W: 1000, H: 660}},
+	"cover":    {Rect: winmgr.Rect{X: 180, Y: 40, W: 400, H: 800}},
+	"downloads": {Rect: winmgr.Rect{X: 640, Y: 120, W: 600, H: 560}},
 }
 
 // Hooks are what only the desktop shell can do.
@@ -44,6 +50,7 @@ type App struct {
 	Set    *settings.Store
 	Win    *winmgr.Manager
 	Hub    *Hub
+	DL     *downloads.Manager
 	Hooks  Hooks
 	out    audio.Output
 	stop   chan struct{}
@@ -71,6 +78,28 @@ func New(dir string, host winmgr.Host) (*App, error) {
 		saved[n] = winmgr.State{Rect: winmgr.Rect{X: w.X, Y: w.Y, W: w.W, H: w.H}, Open: w.Open, Shaded: w.Shaded}
 	}
 	a.Win.Restore(saved)
+	if d := set.Get(); d.Layout != "" {
+		a.Win.SetLayout(d.Layout)
+	}
+
+	// Downloads go to Music\Kororythm Downloads, which the library watches.
+	home, _ := os.UserHomeDir()
+	dlDir := filepath.Join(home, "Music", "Kororythm Downloads")
+	a.DL = downloads.New(filepath.Join(dir, "tools"), dlDir)
+	a.DL.OnChange(func(st downloads.State) { a.Hub.Send("dl", st) })
+	a.DL.OnLog(func(line string) { a.Hub.Send("dlLog", line) })
+	a.DL.OnDone(func(string) {
+		watched := false
+		for _, f := range lib.Folders() {
+			if strings.EqualFold(filepath.Clean(f), filepath.Clean(dlDir)) || strings.HasPrefix(strings.ToLower(dlDir), strings.ToLower(filepath.Clean(f))+string(filepath.Separator)) {
+				watched = true
+			}
+		}
+		if !watched {
+			lib.SetFolders(append(lib.Folders(), dlDir))
+		}
+		go lib.Scan()
+	})
 	a.Win.OnSaved(func(st map[string]winmgr.State) {
 		set.Update(func(d *settings.Data) {
 			for n, s := range st {
@@ -155,15 +184,17 @@ func (a *App) ticker() {
 }
 
 type winInfo struct {
-	Open   bool `json:"open"`
-	Shaded bool `json:"shaded"`
+	Open   bool   `json:"open"`
+	Shaded bool   `json:"shaded"`
+	Layout string `json:"layout,omitempty"`
 }
 
 func (a *App) winStates() map[string]winInfo {
 	out := map[string]winInfo{}
 	for n, s := range a.Win.States() {
-		out[n] = winInfo{Open: s.Open, Shaded: s.Shaded}
+		out[n] = winInfo{Open: a.Win.IsOpen(n), Shaded: s.Shaded}
 	}
+	out["_"] = winInfo{Layout: a.Win.Layout()}
 	return out
 }
 

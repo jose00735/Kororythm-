@@ -25,6 +25,10 @@ export const icon = {
   grip: s('<path d="M20 8L8 20M20 13l-7 7M20 18l-2 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>'),
   list: s('<path d="M8 6.5h12M8 12h12M8 17.5h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="4.5" cy="6.5" r="1.3"/><circle cx="4.5" cy="12" r="1.3"/><circle cx="4.5" cy="17.5" r="1.3"/>'),
   grid: s('<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/>'),
+  l_classic: s('<rect x="2.5" y="3" width="11" height="5" rx="1"/><rect x="2.5" y="9" width="11" height="5" rx="1" fill-opacity="0.6"/><rect x="2.5" y="15" width="11" height="6" rx="1" fill-opacity="0.4"/><rect x="14.5" y="3" width="7" height="18" rx="1" fill-opacity="0.75"/>'),
+  l_pod: s('<rect x="6" y="2" width="12" height="20" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="8" y="4" width="8" height="6" rx="0.8"/><circle cx="12" cy="16" r="3.6" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="16" r="1.2"/>'),
+  l_prism: s('<rect x="2" y="4" width="20" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3.5" y="7.5" width="4" height="8"/><path d="M14.5 11.5l4-3M14.5 11.5l4.5 1.5M14.5 11.5l-1 4.5M14.5 11.5l-4-2" stroke="currentColor" stroke-width="1.3"/><rect x="3" y="16.5" width="18" height="2.5" rx="1" fill-opacity="0.6"/>'),
+  l_cover: s('<rect x="7" y="1.5" width="10" height="21" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="9.5" y="6" width="5" height="5" rx="0.6"/><path d="M8.5 7l1 0.6v3.8l-1 0.6zM15.5 7l-1 0.6v3.8l1 0.6z"/><rect x="9" y="14" width="6" height="1.2" rx="0.6"/>'),
   refresh: s('<path d="M19 12a7 7 0 1 1-2.1-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M20 3.5V9h-5.5z"/>'),
 };
 

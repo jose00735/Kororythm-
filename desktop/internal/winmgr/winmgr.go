@@ -40,9 +40,22 @@ type win struct {
 	shaded bool
 }
 
+// Layouts say which windows belong to which layout. Windows not listed (the
+// library, downloads, and the iPod browser) can float over any layout.
+var Layouts = map[string][]string{
+	"classic": {"player", "eq", "playlist"},
+	"pod":     {"pod"},
+	"prism":   {"prism"},
+	"cover":   {"cover"},
+}
+
+// Main is each layout's own window, which is always shown in that layout.
+var Main = map[string]string{"classic": "player", "pod": "pod", "prism": "prism", "cover": "cover"}
+
 // Manager tracks the windows.
 type Manager struct {
 	mu     sync.Mutex
+	layout string
 	wins   map[string]*win
 	order  []string
 	screen []Rect // work areas of the monitors
@@ -67,7 +80,7 @@ type State struct {
 
 // New makes a manager with the given windows' default places.
 func New(host Host, defaults map[string]State) *Manager {
-	m := &Manager{wins: map[string]*win{}, host: host}
+	m := &Manager{wins: map[string]*win{}, host: host, layout: "classic"}
 	for name, s := range defaults {
 		m.wins[name] = &win{r: s.Rect, fullH: max(s.FullH, s.H), open: s.Open, shaded: s.Shaded}
 		m.order = append(m.order, name)
@@ -149,6 +162,57 @@ func (m *Manager) persist() {
 	}
 }
 
+// owner returns the layout a window belongs to, or "" for floating windows.
+func owner(name string) string {
+	for l, ws := range Layouts {
+		for _, w := range ws {
+			if w == name {
+				return l
+			}
+		}
+	}
+	return ""
+}
+
+// visible reports whether a window shows in the current layout. Caller holds mu.
+func (m *Manager) visible(name string) bool {
+	w := m.wins[name]
+	if w == nil {
+		return false
+	}
+	if Main[m.layout] == name {
+		return true
+	}
+	if o := owner(name); o != "" && o != m.layout {
+		// The iPod window doubles as a library browser over the other layouts.
+		return name == "pod" && w.open
+	}
+	return w.open
+}
+
+// Layout returns the current layout.
+func (m *Manager) Layout() string { m.mu.Lock(); defer m.mu.Unlock(); return m.layout }
+
+// SetLayout switches layout and shows or hides windows to match.
+func (m *Manager) SetLayout(l string) {
+	m.mu.Lock()
+	if _, ok := Layouts[l]; !ok {
+		m.mu.Unlock()
+		return
+	}
+	m.layout = l
+	if w := m.wins["pod"]; w != nil && l == "pod" {
+		w.open = true
+	} else if w != nil {
+		w.open = false // the browser closes when leaving the iPod layout
+	}
+	m.mu.Unlock()
+	m.ApplyAll()
+	m.mu.Lock()
+	m.persist()
+	m.mu.Unlock()
+}
+
 // ApplyAll pushes every window's place to the host.
 func (m *Manager) ApplyAll() {
 	m.mu.Lock()
@@ -156,7 +220,7 @@ func (m *Manager) ApplyAll() {
 	for _, n := range m.order {
 		w := m.wins[n]
 		m.host.SetBounds(n, w.r)
-		if w.open {
+		if m.visible(n) {
 			m.host.Show(n)
 		} else {
 			m.host.Hide(n)
@@ -181,7 +245,7 @@ func (m *Manager) dockedTo(name string) []string {
 		a := m.wins[group[i]]
 		for _, n := range m.order {
 			b := m.wins[n]
-			if in[n] || !b.open {
+			if in[n] || !m.visible(n) {
 				continue
 			}
 			if touches(a.r, b.r) {
@@ -201,7 +265,7 @@ func (m *Manager) DragStart(name string) {
 		return
 	}
 	d := &drag{name: name, start: map[string]Rect{}}
-	if name == Leader {
+	if name == Leader && m.layout == "classic" {
 		d.group = m.dockedTo(name)
 	} else {
 		d.group = []string{name}
@@ -254,7 +318,7 @@ func (m *Manager) snap(r Rect, group []string) (int, int) {
 	}
 	for _, n := range m.order {
 		o := m.wins[n]
-		if moving[n] || !o.open {
+		if moving[n] || !m.visible(n) {
 			continue
 		}
 		b := o.r
@@ -350,7 +414,7 @@ func (m *Manager) SetOpen(name string, open bool) {
 		return
 	}
 	w.open = open
-	if open {
+	if m.visible(name) {
 		m.host.SetBounds(name, w.r)
 		m.host.Show(name)
 	} else {
@@ -363,8 +427,7 @@ func (m *Manager) SetOpen(name string, open bool) {
 func (m *Manager) IsOpen(name string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	w, ok := m.wins[name]
-	return ok && w.open
+	return m.visible(name)
 }
 
 // Shaded reports whether a window is shaded.

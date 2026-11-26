@@ -85,3 +85,34 @@ func TestRestoreKeepsWindowsOnScreen(t *testing.T) {
 		t.Fatalf("library restored off screen at %v", r)
 	}
 }
+
+func TestLayoutsShowTheirWindows(t *testing.T) {
+	h := &shownHost{fakeHost: fakeHost{b: map[string]Rect{}}, shown: map[string]bool{}}
+	m := New(h, map[string]State{
+		"player": {Rect: Rect{0, 0, 460, 180}, Open: true},
+		"eq":     {Rect: Rect{0, 180, 460, 196}, Open: true},
+		"pod":    {Rect: Rect{600, 0, 330, 560}},
+		"prism":  {Rect: Rect{100, 100, 980, 640}},
+		"library": {Rect: Rect{500, 0, 600, 600}, Open: true},
+	})
+	m.SetLayout("prism")
+	if h.shown["player"] || h.shown["eq"] || !h.shown["prism"] || !h.shown["library"] {
+		t.Fatalf("prism layout shows %v", h.shown)
+	}
+	m.SetOpen("pod", true) // iPod browser over Prism
+	if !h.shown["pod"] {
+		t.Fatal("pod browser should float over prism")
+	}
+	m.SetLayout("classic")
+	if !h.shown["player"] || !h.shown["eq"] || h.shown["prism"] || h.shown["pod"] {
+		t.Fatalf("classic layout shows %v", h.shown)
+	}
+}
+
+type shownHost struct {
+	fakeHost
+	shown map[string]bool
+}
+
+func (s *shownHost) Show(n string) { s.shown[n] = true }
+func (s *shownHost) Hide(n string) { s.shown[n] = false }

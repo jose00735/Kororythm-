@@ -10,9 +10,11 @@ import (
 	"strings"
 
 	"github.com/jose00735/kororythm/desktop/internal/audio"
+	"github.com/jose00735/kororythm/desktop/internal/downloads"
 	"github.com/jose00735/kororythm/desktop/internal/dsp"
 	"github.com/jose00735/kororythm/desktop/internal/library"
 	"github.com/jose00735/kororythm/desktop/internal/settings"
+	"github.com/jose00735/kororythm/desktop/internal/winmgr"
 )
 
 // Handler serves the windows' pages from ui and the /api routes.
@@ -81,8 +83,98 @@ func (a *App) Handler(ui fs.FS) http.Handler {
 		writeJSON(w, dsp.Curve(s, audio.OutRate, freqs))
 	})
 	mux.HandleFunc("GET /api/win", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, a.winStates()) })
+	mux.HandleFunc("GET /api/layout", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, map[string]string{"layout": a.Win.Layout()}) })
 	mux.HandleFunc("POST /api/win", a.win)
 	mux.HandleFunc("GET /api/win/bounds", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, a.Win.States()) })
+	// Playlists
+	mux.HandleFunc("GET /api/playlists", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, a.Lib.Playlists()) })
+	mux.HandleFunc("GET /api/playlists/{id}", func(w http.ResponseWriter, r *http.Request) {
+		p, ts, ok := a.Lib.Playlist(r.PathValue("id"))
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		if ts == nil {
+			ts = []*library.Track{}
+		}
+		writeJSON(w, map[string]any{"playlist": p, "tracks": ts})
+	})
+	mux.HandleFunc("POST /api/playlists", func(w http.ResponseWriter, r *http.Request) {
+		var b struct {
+			Name string   `json:"name"`
+			IDs  []string `json:"ids"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		id, err := a.Lib.CreatePlaylist(b.Name, b.IDs)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, map[string]string{"id": id})
+	})
+	mux.HandleFunc("POST /api/playlists/{id}/{op}", func(w http.ResponseWriter, r *http.Request) {
+		var b struct {
+			IDs  []string `json:"ids"`
+			Name string   `json:"name"`
+			I    int      `json:"i"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		id := r.PathValue("id")
+		switch r.PathValue("op") {
+		case "add":
+			n, err := a.Lib.AddToPlaylist(id, b.IDs)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			writeJSON(w, map[string]int{"added": n, "already": len(b.IDs) - n})
+		case "remove":
+			a.Lib.RemoveFromPlaylist(id, b.I)
+			writeJSON(w, map[string]bool{"ok": true})
+		case "rename":
+			a.Lib.RenamePlaylist(id, b.Name)
+			writeJSON(w, map[string]bool{"ok": true})
+		case "delete":
+			a.Lib.DeletePlaylist(id)
+			writeJSON(w, map[string]bool{"ok": true})
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
+	// Downloads
+	mux.HandleFunc("GET /api/dl", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, a.DL.State()) })
+	mux.HandleFunc("POST /api/dl/{op}", func(w http.ResponseWriter, r *http.Request) {
+		var b struct {
+			URL    string           `json:"url"`
+			IDs    []string         `json:"ids"`
+			Format downloads.Format `json:"format"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		switch r.PathValue("op") {
+		case "tools":
+			a.DL.InstallTools()
+		case "probe":
+			a.DL.ProbeURL(b.URL)
+		case "start":
+			if b.Format == "" {
+				b.Format = downloads.MP3V0
+			}
+			if err := a.DL.Start(b.IDs, b.Format); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		case "stop":
+			a.DL.Stop()
+		case "clear":
+			a.DL.ClearFinished()
+		default:
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(w, a.DL.State())
+	})
+
 	mux.HandleFunc("GET /api/about", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]string{"version": Version})
 	})
@@ -187,6 +279,12 @@ func (a *App) Do(c Command) error {
 			return fmt.Errorf("unknown skin %q", c.Name)
 		}
 		p.SetLook(func(d *settings.Data) { d.Skin = c.Name })
+	case "layout":
+		if _, ok := winmgr.Layouts[c.Name]; !ok {
+			return fmt.Errorf("unknown layout %q", c.Name)
+		}
+		p.SetLook(func(d *settings.Data) { d.Layout = c.Name })
+		a.Win.SetLayout(c.Name)
 	case "alwaysTop":
 		p.SetLook(func(d *settings.Data) { d.AlwaysTop = c.On })
 		if a.Hooks.AlwaysTop != nil {

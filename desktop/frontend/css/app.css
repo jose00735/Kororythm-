@@ -334,3 +334,4 @@ body[data-skin="neon"] .album-title { text-shadow: var(--glow); color: var(--acc
 ::-webkit-scrollbar-thumb { background: var(--edge-soft); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-thumb:hover { background: var(--edge); background-clip: padding-box; }
 ::-webkit-scrollbar-track { background: transparent; }
+.btn:disabled { opacity: 0.4; cursor: default; filter: none; }

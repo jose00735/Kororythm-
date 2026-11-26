@@ -36,6 +36,9 @@ type Track struct {
 	ModTime     int64  `json:"modTime"`
 	HasArt      bool   `json:"hasArt,omitempty"`
 	AddedAt     int64  `json:"addedAt"`
+	Plays       int    `json:"plays,omitempty"`
+	LastPlayed  int64  `json:"lastPlayed,omitempty"`
+	Fingerprint string `json:"fp,omitempty"`
 }
 
 // AlbumKey groups tracks into albums.
@@ -57,8 +60,9 @@ func IDFor(path string) string {
 type Library struct {
 	mu      sync.RWMutex
 	file    string
-	tracks  map[string]*Track
-	folders []string
+	tracks    map[string]*Track
+	playlists map[string]*Playlist
+	folders   []string
 	onChange func()
 	scanning bool
 	again    bool // a scan was asked for while one was running
@@ -66,19 +70,23 @@ type Library struct {
 }
 
 type saved struct {
-	Folders []string `json:"folders"`
-	Tracks  []*Track `json:"tracks"`
+	Folders   []string    `json:"folders"`
+	Tracks    []*Track    `json:"tracks"`
+	Playlists []*Playlist `json:"playlists,omitempty"`
 }
 
 // Open loads the catalogue from file (or starts empty).
 func Open(file string) *Library {
-	l := &Library{file: file, tracks: map[string]*Track{}}
+	l := &Library{file: file, tracks: map[string]*Track{}, playlists: map[string]*Playlist{}}
 	if b, err := os.ReadFile(file); err == nil {
 		var s saved
 		if json.Unmarshal(b, &s) == nil {
 			l.folders = s.Folders
 			for _, t := range s.Tracks {
 				l.tracks[t.ID] = t
+			}
+			for _, p := range s.Playlists {
+				l.playlists[p.ID] = p
 			}
 		}
 	}
@@ -107,6 +115,9 @@ func (l *Library) Save() error {
 	s := saved{Folders: l.folders}
 	for _, t := range l.tracks {
 		s.Tracks = append(s.Tracks, t)
+	}
+	for _, p := range l.playlists {
+		s.Playlists = append(s.Playlists, p)
 	}
 	l.mu.RUnlock()
 	sort.Slice(s.Tracks, func(i, j int) bool { return s.Tracks[i].Path < s.Tracks[j].Path })
@@ -168,8 +179,13 @@ func (l *Library) put(ts []*Track, remove []string) {
 	}
 	l.mu.Lock()
 	for _, t := range ts {
-		if old, ok := l.tracks[t.ID]; ok && t.AddedAt == 0 {
-			t.AddedAt = old.AddedAt
+		if old, ok := l.tracks[t.ID]; ok {
+			if t.AddedAt == 0 {
+				t.AddedAt = old.AddedAt
+			}
+			if t.Plays == 0 {
+				t.Plays, t.LastPlayed = old.Plays, old.LastPlayed
+			}
 		}
 		if t.AddedAt == 0 {
 			t.AddedAt = time.Now().Unix()

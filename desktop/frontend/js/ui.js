@@ -1,5 +1,7 @@
 import { icon, parrot } from "./icons.js";
-import { winOp, WIN } from "./bridge.js";
+import { winOp, WIN, api } from "./bridge.js";
+
+const cmdLayout = (name) => api("cmd", { op: "layout", name });
 
 export function el(tag, attrs = {}, ...kids) {
   const e = document.createElement(tag);
@@ -106,8 +108,21 @@ export function marquee(cls = "") {
  * shade, and minimise / shade / close buttons.
  */
 export function titleBar(title, { closable = true } = {}) {
+  const logo = el("button", { class: "tb-logo", html: parrot, title: "Layouts, skins and more", "aria-label": "Kororythm menu" });
+  logo.addEventListener("click", () => {
+    const r = logo.getBoundingClientRect();
+    contextMenu(r.left, r.bottom + 2, [
+      ...[["classic", "Classic"], ["pod", "Pod"], ["prism", "Prism"], ["cover", "Cover Stage"]].map(([id, n], i) => ({ label: `Layout: ${n}  (Ctrl+${i + 1})`, run: () => cmdLayout(id) })),
+      "-",
+      ...[["neon", "Neon"], ["hifi", "HiFi"], ["pod", "Pod"], ["chrome", "Chrome Deck"]].map(([id, n]) => ({ label: `Skin: ${n}`, run: () => api("cmd", { op: "skin", name: id }) })),
+      "-",
+      { label: "iPod browser  (Ctrl+B)", run: () => winOp("toggle", { name: "pod" }) },
+      { label: "Library  (Ctrl+L)", run: () => winOp("toggle", { name: "library" }) },
+      { label: "Downloads  (Ctrl+D)", run: () => winOp("toggle", { name: "downloads" }) },
+    ]);
+  });
   const bar = el("div", { class: "titlebar" },
-    el("span", { class: "tb-logo", html: parrot }),
+    logo,
     el("span", { class: "tb-title" }, title),
     el("span", { class: "tb-rule" }),
     el("span", { class: "tb-buttons" },
@@ -165,4 +180,27 @@ export function contextMenu(x, y, items) {
   const close = (e) => { if (!m.contains(e.target)) { m.remove(); removeEventListener("pointerdown", close, true); } };
   setTimeout(() => addEventListener("pointerdown", close, true));
   m.querySelector("button")?.focus();
+}
+
+/**
+ * A small in-window dialog (instead of the browser's prompt/confirm).
+ * With input = true it returns the typed text, else true/false.
+ */
+export function ask(message, { input = false, value = "", ok = "OK", danger = false } = {}) {
+  return new Promise((resolve) => {
+    const field = input ? el("input", { class: "ask-input", value, "aria-label": message }) : null;
+    const done = (v) => { back.remove(); resolve(v); };
+    const okBtn = textButton(ok, ok, () => done(input ? field.value.trim() || null : true), danger ? "danger" : "accent");
+    const box = el("div", { class: "ask", role: "dialog", "aria-modal": "true", "aria-label": message },
+      el("div", { class: "ask-msg" }, message), field,
+      el("div", { class: "ask-row" }, textButton("CANCEL", "Cancel", () => done(input ? null : false)), okBtn));
+    const back = el("div", { class: "ask-back" }, box);
+    back.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") done(input ? null : false);
+      if (e.key === "Enter") okBtn.click();
+    });
+    document.body.append(back);
+    (field || okBtn).focus();
+    field?.select();
+  });
 }

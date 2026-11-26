@@ -1,5 +1,5 @@
-import { el, fmt, textButton, titleBar, resizeGrip, contextMenu } from "./ui.js";
-import { cmd, winOp } from "./bridge.js";
+import { el, fmt, textButton, titleBar, resizeGrip, contextMenu, ask } from "./ui.js";
+import { cmd, winOp, api } from "./bridge.js";
 
 // Consecutive runs of the queue that share an origin, as on Android:
 // songs from the list you started, and songs you queued on the fly.
@@ -27,6 +27,11 @@ export function playlistWindow(root) {
         textButton("+ ADD", "Add songs from the library", () => winOp("open", { name: "library" }), "accent"),
         textButton("REM", "Remove the selected song", () => { if (selected >= 0) cmd("remove", { i: selected }); }),
         textButton("CLR", "Clear the playlist", () => cmd("clear")),
+        textButton("SAVE", "Save this list as a playlist", async () => {
+          if (!st?.queue?.length) return;
+          const n = await ask("Save the current queue as", { input: true, ok: "SAVE" });
+          if (n) api("playlists", { name: n, ids: st.queue.map((q) => q.id) });
+        }),
         el("span", { class: "spacer" }),
         total,
         resizeGrip(),
