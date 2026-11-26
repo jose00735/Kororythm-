@@ -70,14 +70,14 @@ type Tools struct {
 
 // State is everything the Downloads window shows.
 type State struct {
-	Tools    Tools   `json:"tools"`
-	Probing  bool    `json:"probing"`
-	Probe    *Probe  `json:"probe,omitempty"`
-	Error    string  `json:"error,omitempty"`
-	Jobs     []Job   `json:"jobs"`
-	Running  bool    `json:"running"`
-	Folder   string  `json:"folder"`
-	Format   Format  `json:"format"`
+	Tools   Tools  `json:"tools"`
+	Probing bool   `json:"probing"`
+	Probe   *Probe `json:"probe,omitempty"`
+	Error   string `json:"error,omitempty"`
+	Jobs    []Job  `json:"jobs"`
+	Running bool   `json:"running"`
+	Folder  string `json:"folder"`
+	Format  Format `json:"format"`
 }
 
 // Manager runs probes and downloads one at a time.
@@ -577,4 +577,33 @@ func (m *Manager) ClearFinished() {
 		}
 		s.Jobs = keep
 	})
+}
+
+// FFmpegPath is the installed ffmpeg ("" when it is not installed yet).
+func (m *Manager) FFmpegPath() string { return m.toolPath("ffmpeg") }
+
+// adbURL is Google's platform-tools for Windows (adb), used for syncing over a USB cable.
+const adbURL = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip"
+
+// ADBPath is the installed adb ("" when it is not there).
+func (m *Manager) ADBPath() string { return m.toolPath("adb") }
+
+// InstallADB fetches adb from Google's platform-tools (about 7 MB), once.
+func (m *Manager) InstallADB() error {
+	if m.ADBPath() != "" {
+		return nil
+	}
+	if runtime.GOOS != "windows" {
+		return errors.New("install adb (Android platform-tools) with your package manager")
+	}
+	if err := os.MkdirAll(m.toolsDir, 0o755); err != nil {
+		return err
+	}
+	m.log("Downloading adb from %s", adbURL)
+	zipPath := filepath.Join(m.toolsDir, "platform-tools.zip")
+	if err := m.fetch(adbURL, zipPath, "adb"); err != nil {
+		return fmt.Errorf("adb: %w", err)
+	}
+	defer os.Remove(zipPath)
+	return extractBins(zipPath, m.toolsDir, "adb.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll")
 }

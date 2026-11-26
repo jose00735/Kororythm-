@@ -16,22 +16,24 @@ import (
 	"github.com/jose00735/kororythm/desktop/internal/library"
 	"github.com/jose00735/kororythm/desktop/internal/player"
 	"github.com/jose00735/kororythm/desktop/internal/settings"
+	"github.com/jose00735/kororythm/desktop/internal/syncer"
 	"github.com/jose00735/kororythm/desktop/internal/winmgr"
 )
 
 // Version is shown in the About box and the installer.
-var Version = "2.0.0-beta.1"
+var Version = "2.2.0"
 
 // Windows of the Classic layout, with their default places.
 var Windows = map[string]winmgr.State{
-	"player":   {Rect: winmgr.Rect{X: 120, Y: 90, W: 460, H: 180}, Open: true},
-	"eq":       {Rect: winmgr.Rect{X: 120, Y: 270, W: 460, H: 196}, Open: true},
-	"playlist": {Rect: winmgr.Rect{X: 120, Y: 466, W: 460, H: 330}, Open: true},
-	"library":  {Rect: winmgr.Rect{X: 580, Y: 90, W: 680, H: 706}, Open: false},
-	"pod":      {Rect: winmgr.Rect{X: 160, Y: 80, W: 340, H: 580}},
-	"prism":    {Rect: winmgr.Rect{X: 120, Y: 70, W: 1000, H: 660}},
-	"cover":    {Rect: winmgr.Rect{X: 180, Y: 40, W: 400, H: 800}},
+	"player":    {Rect: winmgr.Rect{X: 120, Y: 90, W: 460, H: 180}, Open: true},
+	"eq":        {Rect: winmgr.Rect{X: 120, Y: 270, W: 460, H: 196}, Open: true},
+	"playlist":  {Rect: winmgr.Rect{X: 120, Y: 466, W: 460, H: 330}, Open: true},
+	"library":   {Rect: winmgr.Rect{X: 580, Y: 90, W: 680, H: 706}, Open: false},
+	"pod":       {Rect: winmgr.Rect{X: 160, Y: 80, W: 340, H: 580}},
+	"prism":     {Rect: winmgr.Rect{X: 120, Y: 70, W: 1000, H: 660}},
+	"cover":     {Rect: winmgr.Rect{X: 180, Y: 40, W: 400, H: 800}},
 	"downloads": {Rect: winmgr.Rect{X: 640, Y: 120, W: 600, H: 560}},
+	"sync":      {Rect: winmgr.Rect{X: 660, Y: 140, W: 560, H: 620}},
 }
 
 // Hooks are what only the desktop shell can do.
@@ -44,17 +46,22 @@ type Hooks struct {
 
 // App is the running player.
 type App struct {
-	Lib    *library.Library
-	Eng    *audio.Engine
-	Player *player.Player
-	Set    *settings.Store
-	Win    *winmgr.Manager
-	Hub    *Hub
-	DL     *downloads.Manager
-	Hooks  Hooks
-	out    audio.Output
-	stop   chan struct{}
-	once   sync.Once
+	Lib     *library.Library
+	Eng     *audio.Engine
+	Player  *player.Player
+	Set     *settings.Store
+	Win     *winmgr.Manager
+	Hub     *Hub
+	DL      *downloads.Manager
+	Sync    *syncer.Server
+	Cable   *syncer.Cable
+	Hooks   Hooks
+	out     audio.Output
+	stop    chan struct{}
+	once    sync.Once
+	syncMu  sync.Mutex
+	syncOn  bool
+	syncLog []syncer.Event
 }
 
 // New opens the library and settings in dir and starts the audio device.
@@ -89,17 +96,33 @@ func New(dir string, host winmgr.Host) (*App, error) {
 	a.DL.OnChange(func(st downloads.State) { a.Hub.Send("dl", st) })
 	a.DL.OnLog(func(line string) { a.Hub.Send("dlLog", line) })
 	a.DL.OnDone(func(string) {
-		watched := false
-		for _, f := range lib.Folders() {
-			if strings.EqualFold(filepath.Clean(f), filepath.Clean(dlDir)) || strings.HasPrefix(strings.ToLower(dlDir), strings.ToLower(filepath.Clean(f))+string(filepath.Separator)) {
-				watched = true
-			}
-		}
-		if !watched {
-			lib.SetFolders(append(lib.Folders(), dlDir))
-		}
+		a.ensureWatched(dlDir)
 		go lib.Scan()
 	})
+	// Songs from the phone go to Music\Kororythm Sync.
+	syncDir := filepath.Join(home, "Music", "Kororythm Sync")
+	pcName, _ := os.Hostname()
+	if s, err := syncer.New(syncer.Config{
+		Dir: filepath.Join(dir, "sync"), Name: pcName, Library: lib, Inbox: syncDir, FFmpeg: a.DL.FFmpegPath,
+		Notify: func(e syncer.Event) {
+			if e.Kind == "received" {
+				a.ensureWatched(syncDir)
+			}
+			a.syncMu.Lock()
+			if e.Kind != "progress" {
+				a.syncLog = append(a.syncLog, e)
+				if len(a.syncLog) > 40 {
+					a.syncLog = a.syncLog[len(a.syncLog)-40:]
+				}
+			}
+			a.syncMu.Unlock()
+			a.Hub.Send("sync", e)
+		},
+	}); err == nil {
+		a.Sync = s
+	}
+	a.Cable = &syncer.Cable{ADB: a.DL.ADBPath, Install: a.DL.InstallADB, Port: syncer.Port,
+		Notify: func(st syncer.CableState) { a.Hub.Send("syncState", a.syncState()) }}
 	a.Win.OnSaved(func(st map[string]winmgr.State) {
 		set.Update(func(d *settings.Data) {
 			for n, s := range st {
@@ -121,10 +144,38 @@ func New(dir string, host winmgr.Host) (*App, error) {
 	return a, nil
 }
 
+// ensureWatched adds dir to the library folders unless one of them already holds it.
+func (a *App) ensureWatched(dir string) {
+	for _, f := range a.Lib.Folders() {
+		f = filepath.Clean(f)
+		if strings.EqualFold(f, filepath.Clean(dir)) || strings.HasPrefix(strings.ToLower(dir), strings.ToLower(f)+string(filepath.Separator)) {
+			return
+		}
+	}
+	a.Lib.SetFolders(append(a.Lib.Folders(), dir))
+}
+
+// StartSync starts listening for phones (HTTPS on 47800, discovery on UDP 47801).
+func (a *App) StartSync() error {
+	a.syncMu.Lock()
+	defer a.syncMu.Unlock()
+	if a.Sync == nil || a.syncOn {
+		return nil
+	}
+	if err := a.Sync.Start(); err != nil {
+		return err
+	}
+	a.syncOn = true
+	return nil
+}
+
 // Close stops audio and saves everything.
 func (a *App) Close() {
 	a.once.Do(func() {
 		close(a.stop)
+		if a.Sync != nil && a.syncOn {
+			a.Sync.Close()
+		}
 		if a.out != nil {
 			a.out.Close()
 		}

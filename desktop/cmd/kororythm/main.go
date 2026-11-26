@@ -25,7 +25,7 @@ var trayIcon []byte
 
 var titles = map[string]string{
 	"player": "Kororythm", "eq": "Kororythm Equalizer", "playlist": "Kororythm Playlist", "library": "Kororythm Library",
-	"pod": "Kororythm", "prism": "Kororythm", "cover": "Kororythm", "downloads": "Kororythm Downloads",
+	"pod": "Kororythm", "prism": "Kororythm", "cover": "Kororythm", "downloads": "Kororythm Downloads", "sync": "Kororythm Sync",
 }
 
 // Each layout's own window gets a taskbar button; the side windows don't.
@@ -139,19 +139,19 @@ func main() {
 			bg = application.BackgroundTypeTransparent
 		}
 		w := wapp.Window.NewWithOptions(application.WebviewWindowOptions{
-			BackgroundType:  bg,
-			Name:            name,
-			Title:           titles[name],
-			URL:             "/index.html?w=" + name,
-			Width:           r.W,
-			Height:          r.H,
-			X:               r.X,
-			Y:               r.Y,
-			InitialPosition: application.WindowXY,
-			Frameless:       true,
-			DisableResize:   true,
-			Hidden:          true,
-			AlwaysOnTop:     top,
+			BackgroundType:   bg,
+			Name:             name,
+			Title:            titles[name],
+			URL:              "/index.html?w=" + name,
+			Width:            r.W,
+			Height:           r.H,
+			X:                r.X,
+			Y:                r.Y,
+			InitialPosition:  application.WindowXY,
+			Frameless:        true,
+			DisableResize:    true,
+			Hidden:           true,
+			AlwaysOnTop:      top,
 			BackgroundColour: application.NewRGB(4, 6, 11),
 			Windows: application.WindowsWindow{
 				// One taskbar button per layout, like Winamp: side windows don't show there.
@@ -223,6 +223,7 @@ func main() {
 	}
 	menu.Add("iPod browser").OnClick(func(*application.Context) { core.Win.SetOpen("pod", !core.Win.IsOpen("pod")) })
 	menu.Add("Downloads").OnClick(func(*application.Context) { core.Win.SetOpen("downloads", true) })
+	menu.Add("Sync with phone").OnClick(func(*application.Context) { core.Win.SetOpen("sync", true) })
 	menu.AddSeparator()
 	menu.Add("Play / Pause").OnClick(func(*application.Context) { _ = core.Do(app.Command{Op: "toggle"}) })
 	menu.Add("Next").OnClick(func(*application.Context) { _ = core.Do(app.Command{Op: "next"}) })
@@ -245,6 +246,12 @@ func main() {
 		}
 		core.Win.SetScreens(work)
 		core.Win.ApplyAll()
+		// Listen for phones straight away once one is paired (the Sync window starts it otherwise).
+		if core.Sync != nil && len(core.Sync.Devices()) > 0 {
+			if err := core.StartSync(); err != nil {
+				log.Println("sync:", err)
+			}
+		}
 	})
 
 	if err := wapp.Run(); err != nil {

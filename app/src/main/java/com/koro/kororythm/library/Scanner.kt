@@ -152,6 +152,8 @@ class Scanner(private val context: Context, private val dao: LibraryDao) {
                     dao.update(
                         entity.copy(
                             id = existing.id, bpm = existing.bpm, gainDb = existing.gainDb, analyzed = existing.analyzed,
+                            plays = existing.plays, lastPlayed = existing.lastPlayed,
+                            syncFp = existing.syncFp.takeIf { existing.codec == entity.codec },
                             genreMain = if (sameGenre) existing.genreMain ?: entity.genreMain else entity.genreMain,
                             subGenre = if (sameGenre) existing.subGenre ?: entity.subGenre else entity.subGenre,
                             genreChecked = if (sameGenre) existing.genreChecked else entity.genreChecked,

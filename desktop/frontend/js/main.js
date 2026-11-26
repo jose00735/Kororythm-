@@ -7,11 +7,12 @@ import { podWindow } from "./win-pod.js";
 import { prismWindow } from "./win-prism.js";
 import { coverWindow } from "./win-cover.js";
 import { downloadsWindow } from "./win-downloads.js";
+import { syncWindow } from "./win-sync.js";
 import { cmd, winOp } from "./bridge.js";
 
 const builders = {
   player: playerWindow, eq: eqWindow, playlist: playlistWindow, library: libraryWindow,
-  pod: podWindow, prism: prismWindow, cover: coverWindow, downloads: downloadsWindow,
+  pod: podWindow, prism: prismWindow, cover: coverWindow, downloads: downloadsWindow, sync: syncWindow,
 };
 const root = document.getElementById("win");
 root.classList.add(`w-${WIN}`);
@@ -43,6 +44,7 @@ addEventListener("keydown", (e) => {
   if (k === "b") winOp("toggle", { name: "pod" });
   else if (k === "l") winOp("toggle", { name: "library" });
   else if (k === "d") winOp("toggle", { name: "downloads" });
+  else if (k === "y") winOp("toggle", { name: "sync" });
   else if (LAYOUT_KEYS[k]) cmd("layout", { name: LAYOUT_KEYS[k] });
   else return;
   e.preventDefault();

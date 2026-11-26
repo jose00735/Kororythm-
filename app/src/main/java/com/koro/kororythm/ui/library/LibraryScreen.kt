@@ -70,6 +70,7 @@ open class LibraryCallbacks {
     open fun newAlbum() {}
     open fun editTags(t: TrackEntity) {}
     open fun downloads() {}
+    open fun sync() {}
     open fun menu(t: TrackEntity?) {}
     open fun upgrade(t: TrackEntity) {}
     open fun lyrics(t: TrackEntity) {}
@@ -112,6 +113,7 @@ fun LibraryScreen(
     onNewAlbum: () -> Unit,
     onEditTags: (String) -> Unit = {},
     onDownloads: () -> Unit = {},
+    onSync: () -> Unit = {},
     onUpgrade: (TrackEntity) -> Unit = {},
     onLyrics: (TrackEntity) -> Unit = {},
     onFixAll: (List<String>) -> Unit = {},
@@ -144,6 +146,7 @@ fun LibraryScreen(
         override fun newAlbum() = onNewAlbum()
         override fun editTags(t: TrackEntity) = onEditTags(t.uri)
         override fun downloads() = onDownloads()
+        override fun sync() = onSync()
         override fun menu(t: TrackEntity?) = vm.openMenu(t)
         override fun upgrade(t: TrackEntity) { vm.openMenu(null); onUpgrade(t) }
         override fun lyrics(t: TrackEntity) { vm.openMenu(null); onLyrics(t) }
@@ -207,10 +210,11 @@ private fun LibraryPage(ui: LibraryUi, cb: LibraryCallbacks, nowPlayingUri: Stri
     NeonScreen(
         title = "LIBRARY",
         onBack = { if (ui.detail != null) cb.closeDetail() else cb.back() },
-        backLabel = if (ui.detail != null) "◂ BACK" else "◂ PLAYER",
+        backLabel = if (ui.detail != null) "◂ BACK" else "◂",
         actions = {
             NeonButton(if (ui.checking != null) "…" else "↻", cb::refresh, active = ui.checking != null)
             NeonButton("⇩", cb::downloads, accent = Neon.Orange)
+            NeonButton("⇅", cb::sync, accent = Neon.Orange)
             NeonButton("IMPORT", cb::import, accent = Neon.Orange)
             NeonButton("+ ALBUM", cb::newAlbum)
         },

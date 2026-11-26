@@ -60,7 +60,7 @@ jobs:
         run: |
           $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
           if (-not (Test-Path $nsis)) { choco install nsis -y --no-progress; $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe" }
-          & $nsis /V2 /DVERSION=2.0.0 /DEXE=..\bin\kororythm.exe "/DOUT=..\bin\Kororythm-${{ steps.v.outputs.version }}-Setup.exe" installer.nsi
+          & $nsis /V2 /DVERSION=2.2.0 /DEXE=..\bin\kororythm.exe "/DOUT=..\bin\Kororythm-${{ steps.v.outputs.version }}-Setup.exe" installer.nsi
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Zip the installer
         shell: pwsh

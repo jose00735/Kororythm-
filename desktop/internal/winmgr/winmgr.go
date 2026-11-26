@@ -324,9 +324,9 @@ func (m *Manager) snap(r Rect, group []string) (int, int) {
 		b := o.r
 		// Only snap to windows that are beside us on the other axis.
 		if r.Y < b.bottom()+Snap && b.Y < r.bottom()+Snap {
-			try(&bestX, b.right(), r.X)  // our left to their right
-			try(&bestX, b.X, r.right())  // our right to their left
-			try(&bestX, b.X, r.X)        // left edges line up
+			try(&bestX, b.right(), r.X) // our left to their right
+			try(&bestX, b.X, r.right()) // our right to their left
+			try(&bestX, b.X, r.X)       // left edges line up
 			try(&bestX, b.right(), r.right())
 		}
 		if r.X < b.right()+Snap && b.X < r.right()+Snap {

@@ -85,12 +85,26 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app), PlayerActions {
         )
     }
 
+    // A song counts as played after 15 s of listening (plays sync with the PC).
+    private var countingUri: String? = null
+    private var heardMs = 0L
+    private var counted = false
+
     private fun startTicker() {
         ticker?.cancel()
         ticker = viewModelScope.launch {
             while (isActive) {
                 controller?.let { c ->
-                    if (c.isPlaying) _state.value = _state.value.copy(positionMs = c.currentPosition)
+                    if (c.isPlaying) {
+                        _state.value = _state.value.copy(positionMs = c.currentPosition)
+                        val uri = _state.value.current?.uri
+                        if (uri != countingUri) { countingUri = uri; heardMs = 0; counted = false }
+                        heardMs += 200
+                        if (!counted && uri != null && heardMs >= 15_000) {
+                            counted = true
+                            launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.koro.kororythm.library.Library.dao.markPlayed(uri) } }
+                        }
+                    }
                 }
                 delay(200)
             }

@@ -83,7 +83,9 @@ func (a *App) Handler(ui fs.FS) http.Handler {
 		writeJSON(w, dsp.Curve(s, audio.OutRate, freqs))
 	})
 	mux.HandleFunc("GET /api/win", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, a.winStates()) })
-	mux.HandleFunc("GET /api/layout", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, map[string]string{"layout": a.Win.Layout()}) })
+	mux.HandleFunc("GET /api/layout", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]string{"layout": a.Win.Layout()})
+	})
 	mux.HandleFunc("POST /api/win", a.win)
 	mux.HandleFunc("GET /api/win/bounds", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, a.Win.States()) })
 	// Playlists
@@ -175,6 +177,36 @@ func (a *App) Handler(ui fs.FS) http.Handler {
 		writeJSON(w, a.DL.State())
 	})
 
+	mux.HandleFunc("GET /api/sync", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, a.syncState()) })
+	mux.HandleFunc("POST /api/sync/{op}", func(w http.ResponseWriter, r *http.Request) {
+		if a.Sync == nil {
+			http.Error(w, "sync is not available", http.StatusServiceUnavailable)
+			return
+		}
+		var body struct{ ID string }
+		json.NewDecoder(r.Body).Decode(&body)
+		switch r.PathValue("op") {
+		case "start":
+			if err := a.StartSync(); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		case "code":
+			a.StartSync()
+			a.Sync.NewCode()
+		case "forget":
+			a.Sync.Forget(body.ID)
+		case "cable":
+			a.StartSync()
+			a.Cable.Enable(!a.Cable.State().On)
+		default:
+			http.NotFound(w, r)
+			return
+		}
+		st := a.syncState()
+		a.Hub.Send("syncState", st)
+		writeJSON(w, st)
+	})
 	mux.HandleFunc("GET /api/about", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]string{"version": Version})
 	})

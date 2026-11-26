@@ -17,7 +17,7 @@ An Android music player for FLAC and MP3 with a classic Winamp layout, two skins
 
 Built with Kotlin, Jetpack Compose and AndroidX Media3. Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Kororythm for Windows (2.0 beta) — `desktop/`
+## Kororythm for Windows (2.2) — `desktop/`
 
 A Windows version written in Go, with the same skins, equalizer and play queue as the phone app.
 
@@ -41,7 +41,17 @@ Develop: `cd desktop && go test ./...`; `go run ./cmd/kororythm-dev -music <fold
 - **Playlists on the PC** (no duplicates), saved from the queue or with *Add to playlist…*; play counts are kept for sync.
 - **Downloads** (Ctrl+D) — paste a link, fetch (stoppable), pick playlist songs, save as tagged MP3 (V0 or 320) into *Music\Kororythm Downloads*, with a live LOG. yt-dlp and ffmpeg are fetched from their GitHub releases the first time.
 
-Coming next (blueprint phases): the Android update, then phone ⇄ PC sync.
+**New in 2.1 / 2.2 — phone ⇄ PC sync, like iTunes** (protocol: [`protocol/SYNC.md`](protocol/SYNC.md)):
+
+- **Pair once:** on the PC, Ctrl+Y (or the parrot or tray menu) opens *Sync with phone*. Press *PAIR A PHONE* and type the 6-digit code on the phone under *LIBRARY ▸ SYNC*. The code is never sent over the network: each side proves it knows the code, and the phone then pins the PC's certificate.
+- **Two-way:** songs the PC has go to the phone, and the phone's songs go to the PC (into *Music\Kororythm Sync*). Songs are matched by their audio, so retagging a song doesn't create a duplicate. Playlists sync by name, and the newer edit wins. Play counts from both sides are added up. Transfers that get cut off resume where they stopped.
+- **Animated on both sides:** a radar while searching, then a glowing arc between the PC and the phone with album covers flying along it in the direction they travel, a progress ring, and the parrot landing on the phone when it's done.
+- **Wi-Fi, USB tethering or a cable:** the phone finds the PC by broadcast on any network it is on, including USB tethering. With *USE USB CABLE* on the PC (it fetches adb once and needs USB debugging on the phone), the phone connects through the cable even with no network at all. You can also type the PC's address.
+- **Selective sync (2.2):** everything, or only chosen PC playlists. A storage bar sets how much space to keep free on the phone, and songs that don't fit wait for the next sync. Hi-res FLAC can arrive as 16-bit FLAC (converted on the PC with ffmpeg). The phone can also sync by itself on Wi-Fi while charging.
+
+## New in v2.2 (Android) — sync with your PC
+
+*LIBRARY ▸ SYNC* finds Kororythm on your PC (over Wi-Fi, USB tethering or a USB cable), pairs with the code the PC shows, and then syncs both ways: songs, playlists and play counts. While it works, it shows the radar, the covers flying along the arc and the parrot landing on the phone. Options: sync only some playlists, how much space to keep free, hi-res as 16-bit FLAC, and auto-sync on Wi-Fi while charging. The phone now counts plays (after 15 s of listening). See the Windows section and `protocol/SYNC.md`.
 
 ## New in v2.0 (Android) — iPod menus and the Windows 7 bar
 

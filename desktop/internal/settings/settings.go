@@ -24,15 +24,15 @@ type Win struct {
 
 // Data is everything saved.
 type Data struct {
-	Volume     float64            `json:"volume"`
-	Eq         dsp.EqSettings     `json:"eq"`
-	Skin       string             `json:"skin"`
-	Layout     string             `json:"layout"`
-	Crossfade  int                `json:"crossfadeMs"`
-	AlwaysTop  bool               `json:"alwaysOnTop"`
-	Windows    map[string]Win     `json:"windows"`
-	Queue      json.RawMessage    `json:"queue,omitempty"`
-	ResumeMs   int64              `json:"resumeMs,omitempty"`
+	Volume    float64         `json:"volume"`
+	Eq        dsp.EqSettings  `json:"eq"`
+	Skin      string          `json:"skin"`
+	Layout    string          `json:"layout"`
+	Crossfade int             `json:"crossfadeMs"`
+	AlwaysTop bool            `json:"alwaysOnTop"`
+	Windows   map[string]Win  `json:"windows"`
+	Queue     json.RawMessage `json:"queue,omitempty"`
+	ResumeMs  int64           `json:"resumeMs,omitempty"`
 }
 
 // Store loads and saves Data.

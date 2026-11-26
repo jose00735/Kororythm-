@@ -14,14 +14,14 @@ const OutRate = 44100
 
 // source is one open song being read at the engine's output rate, in stereo.
 type source struct {
-	id      string
-	dec     Decoder
-	rs      *resampler
-	tmp     []float32
-	stereo  []float32
-	eof     bool
-	outPos  int64 // output frames produced since the start of the song
-	outLen  int64 // song length in output frames (0 if unknown)
+	id     string
+	dec    Decoder
+	rs     *resampler
+	tmp    []float32
+	stereo []float32
+	eof    bool
+	outPos int64 // output frames produced since the start of the song
+	outLen int64 // song length in output frames (0 if unknown)
 }
 
 func newSource(id, path string) (*source, error) {
@@ -115,16 +115,16 @@ type NextFunc func() (id, path string, ok bool)
 // Engine mixes the current song (and the next one, during a crossfade), applies
 // the equalizer and volume, and feeds the output device.
 type Engine struct {
-	mu        sync.Mutex
-	cur, next *source
-	playing   bool
-	volume    float64
-	xfade     int64 // crossfade length in output frames; 0 = gapless
-	eq        *dsp.Equalizer
-	spec      *dsp.Spectrum
-	nextFn    NextFunc
-	events    chan Event
-	mixBuf    []float32
+	mu         sync.Mutex
+	cur, next  *source
+	playing    bool
+	volume     float64
+	xfade      int64 // crossfade length in output frames; 0 = gapless
+	eq         *dsp.Equalizer
+	spec       *dsp.Spectrum
+	nextFn     NextFunc
+	events     chan Event
+	mixBuf     []float32
 	preloading bool
 }
 

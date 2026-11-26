@@ -222,8 +222,26 @@ abstract class LibraryDao {
     @Insert
     abstract suspend fun insertPlaylist(p: PlaylistEntity): Long
 
-    @Query("UPDATE playlists SET name = :name WHERE id = :id")
-    abstract suspend fun renamePlaylist(id: Long, name: String)
+    @Query("UPDATE playlists SET name = :name, modified = :at WHERE id = :id")
+    abstract suspend fun renamePlaylistAt(id: Long, name: String, at: Long)
+
+    open suspend fun renamePlaylist(id: Long, name: String) = renamePlaylistAt(id, name, System.currentTimeMillis())
+
+    @Query("UPDATE playlists SET modified = :at WHERE id = :id")
+    abstract suspend fun touchPlaylist(id: Long, at: Long = System.currentTimeMillis())
+
+    @Query("SELECT * FROM playlists")
+    abstract suspend fun playlistsNow(): List<PlaylistEntity>
+
+    // ---- sync (v5) ----
+    @Query("UPDATE tracks SET syncFp = :fp WHERE id = :id")
+    abstract suspend fun setSyncFp(id: Long, fp: String)
+
+    @Query("UPDATE tracks SET plays = :plays, lastPlayed = :last WHERE id = :id")
+    abstract suspend fun setPlays(id: Long, plays: Int, last: Long)
+
+    @Query("UPDATE tracks SET plays = plays + 1, lastPlayed = :at WHERE uri = :uri")
+    abstract suspend fun markPlayed(uri: String, at: Long = System.currentTimeMillis())
 
     @Query("DELETE FROM playlists WHERE id = :id")
     abstract suspend fun deletePlaylist(id: Long)
@@ -242,6 +260,7 @@ abstract class LibraryDao {
     open suspend fun setPlaylistOrder(id: Long, trackIds: List<Long>) {
         clearPlaylistTracks(id)
         insertPlaylistTracks(trackIds.mapIndexed { i, t -> PlaylistTrack(id, i, t) })
+        touchPlaylist(id)
     }
 
     @Transaction
@@ -258,12 +277,14 @@ abstract class LibraryDao {
         val add = trackIds.distinct().filter { it !in have }
         val start = lastPosition(id) + 1
         insertPlaylistTracks(add.mapIndexed { i, t -> PlaylistTrack(id, start + i, t) })
+        if (add.isNotEmpty()) touchPlaylist(id)
         return add.size
     }
 
     @Transaction
     open suspend fun createPlaylist(name: String, trackIds: List<Long>): Long {
-        val id = insertPlaylist(PlaylistEntity(name = name, createdAt = System.currentTimeMillis()))
+        val now = System.currentTimeMillis()
+        val id = insertPlaylist(PlaylistEntity(name = name, createdAt = now, modified = now))
         insertPlaylistTracks(trackIds.distinct().mapIndexed { i, t -> PlaylistTrack(id, i, t) })
         return id
     }
@@ -290,7 +311,7 @@ abstract class LibraryDao {
         TrackEntity::class, TrackFts::class, UserAlbumEntity::class, UserAlbumTrack::class, SourceEntity::class, HotCue::class,
         PlaylistEntity::class, PlaylistTrack::class, LyricsEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class LibraryDb : RoomDatabase() {
@@ -333,6 +354,16 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+/** v5 (2.1): PC sync — fingerprints, play counts, playlist edit times. */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tracks ADD COLUMN syncFp TEXT")
+        db.execSQL("ALTER TABLE tracks ADD COLUMN plays INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE tracks ADD COLUMN lastPlayed INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE playlists ADD COLUMN modified INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
 /** How badly a track is tagged (see [LibraryDao.needsTags]). */
 const val BADNESS =
     "((CASE WHEN artist IS NULL OR artist = '' THEN 2 ELSE 0 END) + (CASE WHEN album IS NULL OR album = '' THEN 2 ELSE 0 END) + " +
@@ -346,7 +377,7 @@ object Library {
     fun init(context: Context) {
         if (db == null) {
             db = Room.databaseBuilder(context.applicationContext, LibraryDb::class.java, "library.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
         }
     }

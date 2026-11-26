@@ -58,15 +58,15 @@ func IDFor(path string) string {
 
 // Library is the catalogue, saved as one JSON file.
 type Library struct {
-	mu      sync.RWMutex
-	file    string
+	mu        sync.RWMutex
+	file      string
 	tracks    map[string]*Track
 	playlists map[string]*Playlist
 	folders   []string
-	onChange func()
-	scanning bool
-	again    bool // a scan was asked for while one was running
-	saveT   *time.Timer
+	onChange  func()
+	scanning  bool
+	again     bool // a scan was asked for while one was running
+	saveT     *time.Timer
 }
 
 type saved struct {
@@ -185,6 +185,9 @@ func (l *Library) put(ts []*Track, remove []string) {
 			}
 			if t.Plays == 0 {
 				t.Plays, t.LastPlayed = old.Plays, old.LastPlayed
+			}
+			if t.Fingerprint == "" && old.Size == t.Size && old.ModTime == t.ModTime {
+				t.Fingerprint = old.Fingerprint
 			}
 		}
 		if t.AddedAt == 0 {

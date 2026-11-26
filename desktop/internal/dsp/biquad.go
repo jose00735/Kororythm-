@@ -27,10 +27,14 @@ func (f *Biquad) SetPeaking(sampleRate int, freq, q, gainDb float64) {
 }
 
 // SetLowShelf makes the filter a low shelf (slope 1) at freq.
-func (f *Biquad) SetLowShelf(sampleRate int, freq, gainDb float64) { f.shelf(sampleRate, freq, gainDb, true) }
+func (f *Biquad) SetLowShelf(sampleRate int, freq, gainDb float64) {
+	f.shelf(sampleRate, freq, gainDb, true)
+}
 
 // SetHighShelf makes the filter a high shelf (slope 1) at freq.
-func (f *Biquad) SetHighShelf(sampleRate int, freq, gainDb float64) { f.shelf(sampleRate, freq, gainDb, false) }
+func (f *Biquad) SetHighShelf(sampleRate int, freq, gainDb float64) {
+	f.shelf(sampleRate, freq, gainDb, false)
+}
 
 func (f *Biquad) shelf(sampleRate int, freq, gainDb float64, low bool) {
 	a := math.Pow(10, gainDb/40)

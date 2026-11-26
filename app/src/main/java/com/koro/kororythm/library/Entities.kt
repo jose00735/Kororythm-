@@ -52,6 +52,11 @@ data class TrackEntity(
     val subGenre: String? = null,
     /** When the genre lookup last ran for this track (0 = not yet). */
     @ColumnInfo(defaultValue = "0") val genreChecked: Long = 0,
+    /** Audio fingerprint used by the PC sync (v5); null until first synced. */
+    val syncFp: String? = null,
+    /** How many times it was played, and when last (v5, merged with the PC's on sync). */
+    @ColumnInfo(defaultValue = "0") val plays: Int = 0,
+    @ColumnInfo(defaultValue = "0") val lastPlayed: Long = 0,
 ) {
     /** Which tag fields are missing, for the NEEDS TAGS list. */
     val missing: List<String>
@@ -125,6 +130,8 @@ data class PlaylistEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val createdAt: Long,
+    /** Last change (v5): the newer edit wins when syncing with the PC. */
+    @ColumnInfo(defaultValue = "0") val modified: Long = 0,
 )
 
 @Entity(

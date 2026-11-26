@@ -89,10 +89,10 @@ func TestRestoreKeepsWindowsOnScreen(t *testing.T) {
 func TestLayoutsShowTheirWindows(t *testing.T) {
 	h := &shownHost{fakeHost: fakeHost{b: map[string]Rect{}}, shown: map[string]bool{}}
 	m := New(h, map[string]State{
-		"player": {Rect: Rect{0, 0, 460, 180}, Open: true},
-		"eq":     {Rect: Rect{0, 180, 460, 196}, Open: true},
-		"pod":    {Rect: Rect{600, 0, 330, 560}},
-		"prism":  {Rect: Rect{100, 100, 980, 640}},
+		"player":  {Rect: Rect{0, 0, 460, 180}, Open: true},
+		"eq":      {Rect: Rect{0, 180, 460, 196}, Open: true},
+		"pod":     {Rect: Rect{600, 0, 330, 560}},
+		"prism":   {Rect: Rect{100, 100, 980, 640}},
 		"library": {Rect: Rect{500, 0, 600, 600}, Open: true},
 	})
 	m.SetLayout("prism")

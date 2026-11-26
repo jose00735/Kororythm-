@@ -44,7 +44,7 @@ import com.koro.kororythm.ui.wizards.AlbumWizardViewModel
 import com.koro.kororythm.ui.wizards.ImportViewModel
 import com.koro.kororythm.ui.wizards.ImportWizardScreen
 
-enum class Screen { PLAYER, LIBRARY, IMPORT, ALBUM, TAGS, DJ, DOWNLOADS, BULK }
+enum class Screen { PLAYER, LIBRARY, IMPORT, ALBUM, TAGS, DJ, DOWNLOADS, BULK, SYNC }
 
 class MainActivity : ComponentActivity() {
 
@@ -97,6 +97,7 @@ class MainActivity : ComponentActivity() {
             BackHandler(enabled = screen == Screen.TAGS) { fixQueue = emptyList(); screen = tagsReturn }
             BackHandler(enabled = screen == Screen.IMPORT || screen == Screen.ALBUM) { screen = Screen.LIBRARY }
             BackHandler(enabled = screen == Screen.DJ) { screen = Screen.PLAYER }
+            BackHandler(enabled = screen == Screen.SYNC) { screen = Screen.LIBRARY }
             var downloadsReturn by rememberSaveable { mutableStateOf(Screen.PLAYER) }
             BackHandler(enabled = screen == Screen.DOWNLOADS) { screen = downloadsReturn }
             val openDownloads: () -> Unit = { downloadsReturn = screen; screen = Screen.DOWNLOADS }
@@ -143,6 +144,7 @@ class MainActivity : ComponentActivity() {
                             onNewAlbum = { albumVm.startOver(); screen = Screen.ALBUM },
                             onEditTags = openTags,
                             onDownloads = openDownloads,
+                            onSync = { screen = Screen.SYNC },
                         onFixAll = { uris -> if (uris.isNotEmpty()) { fixQueue = uris; fixPos = 0; openTags(uris[0]) } },
                             onUpgrade = { t -> upgradeVm.start(t) },
                             onLyrics = { t -> openLyrics(if (t.uri == playerState.current?.uri) null else t.toTrackInfo()) },
@@ -162,6 +164,7 @@ class MainActivity : ComponentActivity() {
                         )
                         Screen.DJ -> DjScreen(djVm, vm, onClose = { screen = Screen.PLAYER })
                         Screen.BULK -> com.koro.kororythm.ui.bulk.BulkScreen(bulkVm, vm, onClose = { screen = bulkReturn })
+                        Screen.SYNC -> com.koro.kororythm.ui.sync.SyncScreen(onClose = { screen = Screen.LIBRARY })
                         Screen.DOWNLOADS -> DownloadsScreen(downloadsVm, vm, onClose = { screen = downloadsReturn }, upgrade = upgradeVm)
                         Screen.ALBUM -> AlbumWizardScreen(
                             albumVm,

@@ -119,6 +119,7 @@ export function titleBar(title, { closable = true } = {}) {
       { label: "iPod browser  (Ctrl+B)", run: () => winOp("toggle", { name: "pod" }) },
       { label: "Library  (Ctrl+L)", run: () => winOp("toggle", { name: "library" }) },
       { label: "Downloads  (Ctrl+D)", run: () => winOp("toggle", { name: "downloads" }) },
+      { label: "Sync with phone  (Ctrl+Y)", run: () => winOp("toggle", { name: "sync" }) },
     ]);
   });
   const bar = el("div", { class: "titlebar" },

@@ -9,14 +9,14 @@ import (
 var Bands = [10]float64{60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000}
 
 const (
-	bandQ          = 1.41
-	MaxDb          = 12
-	boostHeadroom  = -3.0
-	boostLowHz     = 105.0
-	boostLowDb     = 4.0
-	boostHighHz    = 9000.0
-	boostHighDb    = 3.0
-	clipKnee       = 0.9
+	bandQ         = 1.41
+	MaxDb         = 12
+	boostHeadroom = -3.0
+	boostLowHz    = 105.0
+	boostLowDb    = 4.0
+	boostHighHz   = 9000.0
+	boostHighDb   = 3.0
+	clipKnee      = 0.9
 )
 
 // EqSettings is everything on the EQ panel.
@@ -74,15 +74,15 @@ func PresetBands(name string) ([10]float64, bool) {
 // Equalizer is the Winamp-style 10-band EQ with preamp and the optional "Boost"
 // loudness curve. Update may be called from any goroutine while Process runs.
 type Equalizer struct {
-	mu         sync.Mutex
-	rate, ch   int
-	bands      [10]*Biquad
-	active     [10]bool
-	low, high  *Biquad
-	preGain    float64
-	boost      bool
-	bypass     bool
-	applied    *EqSettings
+	mu        sync.Mutex
+	rate, ch  int
+	bands     [10]*Biquad
+	active    [10]bool
+	low, high *Biquad
+	preGain   float64
+	boost     bool
+	bypass    bool
+	applied   *EqSettings
 }
 
 // NewEqualizer builds an EQ for interleaved audio at sampleRate with ch channels.
